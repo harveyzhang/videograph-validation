@@ -1,0 +1,40 @@
+# Dependencies / build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# Local runtime data, credentials, rendered projects
+.cache/
+.queue/
+projects/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.claude/settings.local.json
+
+# Local song files (not covered by the reference code license)
+/public/audio/*
+!/public/audio/.gitkeep
+
+# Root-level generated audits and operator responses
+/*-audit.png
+/check-screenshot.png
+/shot-validation-*.png
+/reference-filmstrip.png
+/project-reproduction-ui.png
+/project-created.json
+/project-open-job.json
+/project-baseline-render.json
+
+# OS / editor state
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
