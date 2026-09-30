@@ -140,6 +140,13 @@ function versionSnapshot(shot) {
     codeHash: shot.codeHash, prompt: shot.prompt, lyricPlan: shot.lyricPlan, summary: shot.summary, validation: shot.validation,
     intent: shot.intent, mode: shot.mode, duration: shot.duration, easing: shot.easing, direction: shot.direction });
 }
+/** 快照键以基线为唯一事实：候选期写入而基线没有的字段必须删除，浅合并会残留候选的 codeHash/summary 等。 */
+function restoreSnapshot(target, snapshot) {
+  for (const key of ['module', 'params', 'source', 'start', 'end', 'codeHash', 'prompt', 'lyricPlan', 'summary', 'validation', 'intent', 'mode', 'duration', 'easing', 'direction']) {
+    if (snapshot[key] === undefined) delete target[key];
+    else target[key] = structuredClone(snapshot[key]);
+  }
+}
 function invalidateResponses(shot) {
   for (const note of shot.feedback ?? []) if (note.status === 'responded') {
     note.status = 'pending'; note.invalidatedAt = Date.now();
@@ -266,8 +273,7 @@ export function rejectShotFeedback(id, shotId, expectedInputRevision, kind = 'sh
     if (shot.locked) throw new ProjectError('镜头已锁定，请先解锁', 409);
     if (!shot.reviewBaseline || !(shot.feedback ?? []).some((note) => note.status !== 'accepted')) throw new ProjectError('没有可拒绝的候选', 409);
     shot.previousVersion = versionSnapshot(shot);
-    const baseline = structuredClone(shot.reviewBaseline);
-    Object.assign(shot, baseline);
+    restoreSnapshot(shot, structuredClone(shot.reviewBaseline));
     invalidateResponses(shot);
     shot.inputRevision++; shot.inputToken = randomUUID(); shot.status = 'needs-generation'; delete shot.validation;
     for (const note of shot.feedback ?? []) if (note.status !== 'accepted') note.rejectedAt = Date.now();

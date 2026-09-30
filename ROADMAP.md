@@ -212,7 +212,8 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | CORE-01 歌词元素与转场闭环 | 当前 AI 实现中 | `src/server/lyric-elements.mjs`、`transitions.mjs`、`transition-runtime.mjs`，`src/project/LyricInspector.tsx`、`TransitionInspector.tsx`，相关专属测试 | 真实歌词依据、转场节点/意见、预览与导出一致；不扩展品牌素材领域 |
 | PV-01 独立 PV | 当前 AI 实现中 | `examples/last-audit/`、`scripts/author-last-audit.mjs`、专属视觉验收脚本 | 只通过 MCP 修改独立创作工程，不动参考工程；歌词相关元素要可解释 |
 | ASSET-01 品牌与产品素材 | 建议同事认领，尚未开始 | 新目录 `src/brand/`、`src/server/brand/`、`scripts/tests/brand/`、`public/brand-demo/` | 独立实现品牌资料/素材元数据与管理面板；先使用测试数据和适配接口，不直接改主界面或工程数据库 |
-| QA-01 人与 AI 操作检查 | 可由另一位协作者认领 | 新目录 `scripts/tests/collaboration/`、独立测试夹具 | 测锁定、旧版本提交、保存恢复、反馈采用、权限和缓存失效；不能改产品实现来让测试变绿 |
+| QA-01 人与 AI 操作检查 | ✅ ZCode 会话认领（2026-09-30，用户指派），第一切片已交付 | 新目录 `scripts/tests/collaboration/`、独立测试夹具 | 反馈生命周期多步序列：拒绝→重新响应→接受、重复拒绝恢复一致、human/mcp 来源组合；服务级与权限测试留待后续切片；不能改产品实现来让测试变绿 |
+| FEEDBACK-02 人工反馈闭环收尾 | ✅ ZCode 会话认领（2026-09-30，用户指派），后端完成 | `src/server/project-store.mjs` 反馈/接受/拒绝语义、`scripts/project-store-test.mjs` | 拒绝候选按快照键完整恢复、不残留候选字段（shots 与 transitions 共用）；提交只标记明确响应的意见。`ProjectStudio.tsx` 源码弹窗勾选 UI 在集成者手中，交接要点：按 shot.feedback 渲染 pending 意见复选框，仅提交勾选项，勿自动全选 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 
 认领方式：先在本节登记工作包、分支、范围与状态，再开始编辑。没有登记的同事不被视为已经接单；需要跨范围修改时，先把建议交给对应 owner/集成者，不能两边同时覆盖同一文件。
@@ -237,7 +238,7 @@ ASSET-01 的面板和路由先从自己的目录导出；集成者在热点文�
 ### Git 与运行环境
 
 - 产品目录已建立独立 Git 仓库；参考仓库在边界外。依赖、缓存、令牌、数据库、BGM 与成片已由 `.gitignore` 排除。
-- **当前尚未创建初始提交、没有远端，也没有推送。** 先完成一个经验证的基线，再在明确的提交指令下固定基线；未固定基线前，不把当前未提交的混合工作区当作可合并的多人基线。
+- **基线已建立并推送（2026-09-30，用户指令）：commit `3c8243a` → github.com/G1en-114/videograph-validation main。** 之后的功能改动按工作包登记范围进行；不要把未登记的混合工作区当作可合并基线。
 - 基线形成后，每人使用独立 clone 或独立工作副本和独立功能分支：`feat/lyrics-transitions`、`feat/brand-assets`、`test/collaboration`。不共享同一工作目录来回切分支。
 - 同机并行时使用不同端口、独立 `.cache/`、`.queue/` 和 `projects/`；不得让两个开发服务同时写同一份工程数据库/服务令牌。前端 service URL、后端允许的 Origin 与 MCP service URL 必须对应同一套实例。
 - 当前默认实例是前端 5188、后端 5191；同事建议预留前端 5288、后端 5291。隔离配置还需在代码中接通后验收，未接通前应使用不同机器或只运行一套服务。

@@ -88,6 +88,11 @@ test('reject restores the baseline, preserves feedback, and never changes other 
   assert.equal(p.shots[0].feedback[0].status, 'pending');
   assert.equal(p.shots[0].status, 'needs-generation');
   assert.equal(p.shots[0].previousVersion.module, candidate);
+  assert.equal(p.shots[0].codeHash, undefined);
+  assert.equal(p.shots[0].summary, undefined);
+  assert.equal(p.shots[0].source, 'reference-import');
+  assert.deepEqual(p.shots[0].params, before.shots[0].params);
+  assert.equal(p.shots[0].validation, undefined);
   assert.deepEqual(p.shots[1], before.shots[1]);
   assert.equal(readFileSync(join(root, id, `engine/app/src/scenes/${candidate}.ts`), 'utf8'), codeA);
 });
@@ -114,4 +119,10 @@ test('adding a new opinion resets earlier responses but retains the original bas
   const id = fixture(), note = add(id); submit(id, [note]); add(id);
   assert.equal(first(id).feedback[0].status, 'pending');
   assert.equal(first(id).reviewBaseline.module, 'base');
+});
+test('a submission only marks the feedback it explicitly addresses', () => {
+  const id = fixture(), firstNote = add(id), secondNote = add(id); submit(id, [firstNote]);
+  const shot = first(id);
+  assert.equal(shot.feedback.find((note) => note.id === firstNote).status, 'responded');
+  assert.equal(shot.feedback.find((note) => note.id === secondNote).status, 'pending');
 });
