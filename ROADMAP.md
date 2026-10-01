@@ -369,6 +369,14 @@ skills/shotcraft/
 8. ⬜ 新增工程/MCP/人工反馈/恢复的自动化验收，并运行既有全量回归。
 9. ⬜ 更新本文件完成状态与 HANDOFF 操作说明；保留真实测试结果和可打开的成片链接。
 
+### 已登记问题（2026-10-01 产品测试轮，登记人：QA-01 ZCode 会话）
+
+本轮全量产品测试（领域测试、六项回归、工程视图、参考引擎、转场集成审计）结论为产品功能无缺陷；以下为测试中发现并登记的工具链/运维问题。均为 ⬜ 未修复；BUG-01/02 与 FB-04 同属验收脚本域，可在 FB-04 开工时一并处理（修复须按 QA-01 边界：只改测试脚本，不为让测试变绿改产品实现）。
+
+- **BUG-01** ⬜ `scripts/project-view-audit.mjs:33` 断言绑定工程文案：等待 `.project-inspector .sidebar-title` 含“副歌”，隐含假设第 4 镜头标题为“第一次副歌”（仅工程 `62a1d69e` 成立）。对工程 `052d3bd1`（第 4 镜头“风险登记 / 第一次上调”）30s 超时失败。已复现（本轮首跑即挂）。建议：先从服务读取工程数据，断言 inspector 标题等于所选镜头实际 `title`，不再硬编码文案。
+- **BUG-02** ⬜ `scripts/mcp-server-test.mjs` 单独运行后 `.queue/req-mcptest-1.json`、`res-mcptest-1.json` 残留：`audit-all.mjs` 的 finally 会清理这两个固定 fixture，但直接运行该测试脚本不做清理；残留会触发 audit-all 开头的“队列已有工作”保护，挡住下次 `npm run audit`。本轮已手工删除后恢复。建议：test 脚本加 try/finally 自清理（同 audit-all 的 fixtureFiles 逻辑）。
+- **BUG-03** ⬜（运维提醒，低优先）工程服务（5191）无热重载，启动早于源码修改时静默运行旧代码：本轮实测服务 19:12:44 启动、27 个源文件 19:16:03 修改，测试前提失效，重启后全绿。建议任选其一：启动日志打印启动时间与提示；或 `/health` 返回 `bootTime`，审计脚本比对 `src/` 最新 mtime 并警告。
+
 ## 四、人工参与的正式设计
 
 ### 工程拆分
@@ -506,7 +514,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | SKILL-01 shotcraft 纳入仓库 | ✅ ZCode 会话认领（2026-10-01）：已写代码+已运行验证，分支 feat/skill-shotcraft | skills/shotcraft/、scripts/skills/、scripts/tests/docs/（已交付）；MCP resources/craft_guide/respond_to_feedback 注册提给集成者 | 内容为原创蒸馏，许可归档见 skills/shotcraft/SOURCES.md（8 无许可仓库仅思路级、StuGRua 按受限处理）；分发用 scripts/skills/install.mjs；工具速查表由 sync-platform.mjs 从 MCP-GUIDE 生成，mcp-guide-sync 测试兜底（1 项占位等集成者注册后启用） |
 | INT-00 / FB-01 | ✅ 集成者（本会话）2026-10-02 完成，已合并 main | `src/server/feedback.mjs`、`scripts/tests/feedback/` | 见第三节 |
 | FB-02 / FB-03 / FB-04 | ⬜ 待认领；FB-01 契约已在 main，可直接开工，详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
-| SONG-00 ～ SONG-06 任意歌曲拆解 | ⬜ 待认领（2026-10-01 规划），详见第三节“并行冲刺 SONG” | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/` | SONG-00/01 可与反馈冲刺并行；下载模型/建 Python 环境前须用户确认 |
+| SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话认领（2026-10-02，用户指派全系列），实现中 | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 按序 SONG-00→(01∥02∥03)→04→05→06；SONG-06 验收由本会话（QA-01 owner）执行；模型下载/建 Python 环境前逐项征得用户同意；SONG-05 的 MCP 注册与路由由集成者合并 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 
 认领方式：先在本节登记工作包、分支、范围与状态，再开始编辑。没有登记的同事不被视为已经接单；需要跨范围修改时，先把建议交给对应 owner/集成者，不能两边同时覆盖同一文件。
