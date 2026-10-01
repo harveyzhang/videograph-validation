@@ -29,8 +29,11 @@ try {
   assert.ok(parseFloat(player) > 0.5, 'audio-clock playback must advance');
   await page.screenshot({ path: fileURLToPath(new URL('../project-reproduction-ui.png', import.meta.url)) });
   await page.getByRole('button', { name: '关闭引擎预览', exact: true }).click();
-  await page.locator('.project-shot-list button').nth(3).click();
-  await page.waitForFunction(() => document.querySelector('.project-inspector .sidebar-title')?.textContent?.includes('副歌'));
+  const shotButton = page.locator('.project-shot-list button').nth(3);
+  const expectedTitle = await shotButton.locator('strong').textContent();
+  await shotButton.click();
+  // BUG-01 修复：断言目标取自工程真实数据，不再硬编码某个工程的镜头文案。
+  await page.waitForFunction((t) => document.querySelector('.project-inspector .sidebar-title')?.textContent?.includes(t), expectedTitle);
   const completed = page.getByRole('link', { name: /打开成片/ }).first();
   await completed.waitFor({ timeout: 15000 });
   const url = await completed.getAttribute('href');
