@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-01 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具；§6 为计划中工具，未实现前不要调用。
+toolset: 2026-10-02 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具（含 FB-02/FB-03 意见与画面工具）；§6 为计划中工具，未实现前不要调用。
 
 > CLEANUP-01（2026-10-01）：旧演示视图（单镜头工坊 / P(DOOM) 教学）的 `shot_queue_*`、`shot_cards_*`、`pdoom_*`、`lyric_research_draft` 工具已随代码一并移除；本指南只覆盖真实工作台的 `project_*` 工具。
 
@@ -73,8 +73,8 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_shot_lyrics` | `projectId, shotId` | 镜头窗口内词级歌词、`instrumental` 标记、已有 `lyricPlan` |
 | `project_shot_source` | `projectId, shotId` | `{ shot, code, contract, lyricContext, source }`：当前真实 TS 源码与完整引擎契约（ENGINE.md） |
 | `project_shot_update` | `projectId, shotId, expectedInputRevision, patch` | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `lyricPlan` → `needs-generation`；改 `params` → `needs-validation`；三者都会让已响应意见退回 `pending` |
-| `project_shot_submit` | `projectId, shotId, expectedInputRevision, code` | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`addressedFeedbackIds`。生成 `vg-<sha256>` 不可变模块，状态 → `needs-validation` |
-| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符），记为 `author: mcp`（代人转述时在正文注明）；首条未接受意见时冻结 `reviewBaseline`；镜头 → `needs-generation` |
+| `project_shot_submit` | `projectId, shotId, expectedInputRevision, code` | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`feedbackResponses: [{ feedbackId, outcome: addressed\|partial, how }]`（优先）或兼容参数 `addressedFeedbackIds`（视为 addressed、how 为空；同 ID 以 feedbackResponses 为准）。生成 `vg-<sha256>` 不可变模块，状态 → `needs-validation`。AI 不能接受意见 |
+| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符），可带 `anchor`（`t/range/lyricElementId/region/aspect`，服务端校验窗口与元素引用）与 `preserve`（≤12 条），记为 `author: mcp`（代人转述时在正文注明）；首条未接受意见时冻结 `reviewBaseline`；镜头 → `needs-generation` |
 
 `lyricPlan` 结构：`{ summary, elements: [{ name, quote, meaning, treatment, kind?: entity|action|metaphor, cueWord? }] }`。`quote` 必须是本镜头窗口内的真实歌词，`cueWord` 必须在该句中，否则拒绝。有歌词的镜头至少一个元素。
 
@@ -84,9 +84,17 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 |---|---|---|
 | `project_transition_get` | `projectId, transitionId` | 转场节点、意见、配置、前后镜头元素方案、准确时间窗 |
 | `project_transition_update` | `projectId, transitionId, expectedInputRevision, patch` | patch 仅 `intent / locked`；新 intent → `needs-generation`，需随后 configure |
-| `project_transition_configure` | `projectId, transitionId, expectedInputRevision, config` | `config: { mode, duration ≤1.5, easing, direction }`，可带 `addressedFeedbackIds`。过渡在切点后发生，不改全曲时长与歌词时序 |
-| `project_transition_feedback_add` | `projectId, transitionId, expectedInputRevision, text` | 新增转场意见，同时冻结两侧镜头版本 |
+| `project_transition_configure` | `projectId, transitionId, expectedInputRevision, config` | `config: { mode, duration ≤1.5, easing, direction }`，可带 `feedbackResponses`（同 `project_shot_submit`）或兼容参数 `addressedFeedbackIds`。过渡在切点后发生，不改全曲时长与歌词时序。AI 不能接受意见 |
+| `project_transition_feedback_add` | `projectId, transitionId, expectedInputRevision, text` | 新增转场意见（可带 `anchor/preserve`，锚点窗口为前后镜头合并窗口），同时冻结两侧镜头版本 |
 | `project_transition_validate` | `projectId, transitionId` | 后台抽检切点前后 5 帧，返回 job |
+
+### 意见与画面（FB-03）
+
+| 工具 | 必填参数 | 作用 / 返回 |
+|---|---|---|
+| `project_feedback_inbox` | — | 可选 `projectId`、`status`（默认 `pending`；`open` 为全部未接受）。agent 的入口：返回每条意见的目标、时间窗、锚点、保留项、上下文摘要与 `nextStep`；不传 projectId 时汇总所有本地工程。AI 不能接受意见 |
+| `project_feedback_ask` | `projectId, targetKind, targetId, feedbackId, question` | 意图含糊时向人提问：意见转 `needs-clarification`，人回复后回 `pending`；提问不改输入版本。AI 不能替人回复 |
+| `project_stills` | `projectId`（另需 `shotId` 或 `transitionId`） | 可选 `times`（≤6 个、须在目标时间窗内；默认 = 未接受意见锚点 t + 窗口 0/0.5/1）、`version: current\|before-feedback`、`width`（320..1920，默认 960）。后台真实引擎渲染静帧，返回 job；完成后 `project_job_get` 以 MCP image 内容（base64 PNG）返回并附 `artifacts/<key>.png` 路径。缓存键 = 版本输入 + t + 宽度。AI 不能接受意见 |
 
 ### 预览、验证、导出、任务
 
@@ -103,17 +111,17 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 ## 4. 标准流程：响应人的修改意见
 
 ```
-找意见 → 读上下文 → 看画面 → 改代码 → 提交并声明响应 → 验证 → 自查 → 交给人确认
+收件箱找意见 → 读上下文 → 看画面（stills）→ 改代码 → 提交并逐条声明响应 → 验证 → 自查 → 交给人确认
 ```
 
-1. **找到待处理意见**：`project_list` → `project_get`，筛选 `shots[].feedback` 与 `transitions[].feedback` 中 `status === 'pending'` 的条目；注意读 `anchor`（定位到哪里）和 `preserve`（不能动什么）。（FB-03 完成后改用 `project_feedback_inbox` 一次取全。）
+1. **找到待处理意见**：`project_feedback_inbox`（默认 pending；不传 projectId 汇总全部工程）。逐条读 `note.anchor`（定位到哪里）和 `note.preserve`（不能动什么），按 `nextStep` 行动。
 2. **读上下文**：对目标镜头调用 `project_shot_lyrics` 与 `project_shot_source`。同时读：原始 `prompt`（不能丢的意图）、意见原文、`reviewBaseline`（修改前版本）、当前 `inputRevision`。
-3. **看画面**：先看现有 `validation.thumb`；需要动态时用 `project_preview`。不要只凭代码猜效果。
-4. **改代码**：在当前源码基础上修改，遵守引擎契约与 shotcraft 技法（见 §7）；只改意见指向的部分，意见说要保留的内容（歌词时序、Logo、镜头长度等）保持不变。
-5. **提交**：`project_shot_submit`，`expectedInputRevision` 取刚读到的值，`addressedFeedbackIds` 只列这次**真正处理了**的意见，`summary` 写清改了什么。
+3. **看画面**：`project_stills`（默认时间点即意见锚点；改完再取 `version: before-feedback` 与当前对比同一时间点）。需要动态时用 `project_preview`。不要只凭代码猜效果。
+4. **改代码**：在当前源码基础上修改，遵守引擎契约与 shotcraft 技法（见 §7）；只改意见指向的部分，`preserve` 列表（歌词时序、Logo、镜头长度等）保持不变。意图含糊先 `project_feedback_ask` 澄清。
+5. **提交**：`project_shot_submit`，`expectedInputRevision` 取刚读到的值，`feedbackResponses: [{ feedbackId, outcome, how }]` 只列这次**真正处理了**的意见（partial 必须写 how），`summary` 写清改了什么。
 6. **验证**：`project_validate` → 轮询 `project_job_get` 直到 `done/error`。失败时读 `error`，修正后重新提交（最多两轮，仍失败就停下来报告）。
-7. **自查**：读新缩略图，确认意见被处理、保留项没坏、其他镜头的 `codeHash` 没变。
-8. **交接给人**：回复中写明处理了哪些意见、如何处理、哪些没有处理及原因。然后停止：采用或拒绝由人在界面完成。
+7. **自查**：读新缩略图 / 重取 stills，确认意见被处理、保留项没坏、其他镜头的 `codeHash` 没变。
+8. **交接给人**：回复中写明处理了哪些意见、如何处理、哪些没有处理及原因。然后停止：采用或拒绝由人在界面完成（AI 不能接受意见）。
 
 转场意见同理：`project_transition_get` → `project_transition_configure`（带 `addressedFeedbackIds`）→ `project_transition_validate`。
 
@@ -122,22 +130,19 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | 现象 | 原因 / 处理 |
 |---|---|
 | 409 `镜头版本已改变` | 别人或界面刚改过；重新 `project_get` / `project_shot_source` 后基于新版本重做 |
-| 二次提交后旧意见变回 `pending` | 每次 submit 都会使旧响应失效（它们针对旧代码）。新提交里要把仍然成立的意见 ID 一并放入 `addressedFeedbackIds` |
+| 二次提交后旧意见变回 `pending` | 每次 submit 都会使旧响应失效（它们针对旧代码）。新提交里要把仍然成立的意见 ID 一并放入 `feedbackResponses` |
 | `反馈 ID 必须来自本镜头尚未接受的意见` | ID 拼错、属于其他镜头，或已被接受 |
 | 拒绝后镜头是 `needs-generation` | 人拒绝候选会恢复修改前代码，但仍需按意见重新改写 |
 | `project_render` 返回 409 | 还有未接受意见、待改写镜头或待配置转场；不要试图绕过 |
 | 场景运行报错或黑帧 | 先看 `project_job_get` 的 `error`；引擎每帧错误会中止，不会静默黑帧 |
+| `project_stills` 对 `needs-generation` 镜头也能出图 | 预期行为：意见加入即标记待改写，但当前源码仍可渲染——agent 改写前正要看锚点处现状 |
+| stills 图片内容缺失（只有路径） | MCP 进程的 `VIDEOGRAPH_PROJECTS` 与工程服务不一致，读不到产物文件；对齐 env 后重试 |
 | 新工具不可见 | MCP 会话需要重连 |
 
 ## 6. 计划中的工具与字段（未实现，见 ROADMAP「当前冲刺」）
 
 | 名称 | 预期作用 |
 |---|---|
-| `project_feedback_inbox` | 跨镜头/转场（可跨工程）列出意见，带定位、上下文和下一步提示。**后端已就绪**：`GET /feedback?projectId=&status=open|pending|needs-clarification|responded|accepted` |
-| `project_feedback_ask` | AI 向人提问澄清。**后端已就绪**：`POST /projects/:id/{shots|transitions}/:tid/feedback/:fid/ask`（人回复走 `.../reply`，仅限 human） |
-| `project_shot_submit` / `project_transition_configure` 的 `feedbackResponses` | 逐条说明响应：`[{ feedbackId, outcome: addressed|partial, how }]`，partial 必须写 how。**后端已就绪**，MCP 参数待 FB-03 暴露；目前只能用 `addressedFeedbackIds` |
-| `project_feedback_add` 的 `anchor` / `preserve` | 后端已就绪（人从界面添加时使用）；MCP 参数待 FB-03 |
-| `project_stills` | 按指定时间点渲染多张静帧（当前版本或修改前版本），供 agent 看画面 |
 | `craft_guide` + MCP resources/prompts | 通过 MCP 读取 shotcraft 技法与“按意见改镜头”流程模板 |
 | `project_create_from_audio` | 任意本地音频建工程（可附歌词/LRC/语言/分析级别）；参考曲仍走指纹导入。`project_create_from_bgm` 保留为别名 |
 | `song_analysis_get / song_analysis_run / song_analysis_patch` | 分层读取、运行固定分析阶段、提交修正（标 mcp 来源） |

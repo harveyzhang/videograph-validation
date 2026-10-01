@@ -100,23 +100,26 @@
 - 已运行：`scripts/tests/feedback/feedback-contract.test.mjs`（8 项）+ `feedback-http.test.mjs`（独立端口与临时目录的真实服务冒烟）通过；原有 27 项领域测试不变通过；`npm run build` 通过。
 - 测试（不启服务）：锚点越界拒绝；lyricElementId 失效拒绝；partial 响应可见但需人接受；提问→回复→响应→接受全流程；旧格式意见与旧参数提交仍可用；inbox 不泄露服务令牌/本机绝对路径。
 
-#### FB-02 人的意见输入与对比界面（独占 `src/project/FeedbackComposer.tsx`、`src/project/ReviewCompare.tsx`（新建）及其样式；`ProjectStudio.tsx` 只做替换接线，由集成者合并）
+#### ✅ FB-02 人的意见输入与对比界面（2026-10-02 完成；独占 `src/project/FeedbackComposer.tsx`、`src/project/ReviewCompare.tsx`（新建）及其样式（追加在 `project.css` 尾部 FB-02 小节）；`ProjectStudio.tsx` 替换接线在本分支一并完成，集成者评审重点）
 
-1. 意见节点改为 `FeedbackComposer`：正文；“定位到当前预览时间”按钮；从本镜头 `lyricPlan.elements` 下拉选择元素；方面 aspect 单选；“必须保留”多行列表，并提供常用项一键添加（歌词时序 / 镜头时长 / 配色 / 文字内容）；可选在缩略图上框选区域。
-2. 预览时间来源：`reference-server.mjs` 注入的播放器每 250ms 以 `postMessage({ type: 'videograph:time', t })` 告诉父页面（只接受来自预览 origin 的消息）。这处改动属于热点文件，提给集成者。
-3. 意见列表显示：锚点标签（`@12.40s`、`元素：火花`）、保留项、agent 的 `response.how`、`partial` 警示、`needs-clarification` 下的问题与回复框。
-4. `ReviewCompare`：修改前 / 当前候选两列，同一时间点的静帧并排显示（用 FB-03 的 stills），并可切到双播放器；“采用 / 拒绝”按钮沿用现有接口与“我已检查当前候选”的确认约束。
-5. 无障碍：所有输入有 label；键盘可完成添加意见与采用；状态不只靠颜色区分。
-- 验收：`scripts/tests/feedback/ui-feedback.audit.mjs`（无头 Edge + 独立临时 projects 目录 + mock 服务或独立端口）覆盖添加带锚点意见、刷新后仍在、回复澄清、对比后采用。
+1. 意见节点改为 `FeedbackComposer`：正文；“定位到当前预览时间”按钮；从本镜头 `lyricPlan.elements` 下拉选择元素；方面 aspect 单选（radio group）；“必须保留”多行列表，并提供常用项一键添加（歌词时序 / 镜头时长 / 配色 / 文字内容）；可选在缩略图上框选区域（pointer 拖拽 + 数字输入键盘路径，0..1 归一化）。
+2. 预览时间来源：`reference-server.mjs` 注入的播放器每 250ms `postMessage({ type: 'videograph:time', t })`（targetOrigin '*'，父页校验 `event.origin === 预览 origin` 且 `event.source === 预览 iframe.contentWindow`；时间取 `__videographTime()` 钩子或解析 `#info` 开头数字——真实 pdoom 播放器的 #info 格式以 project-view-audit 的既有断言为据，**待有参考仓库的机器实测确认**）。
+3. 意见卡列表：锚点标签（`@12.40s`、`元素：火花`、区域、方面）、保留项、agent 的 `response.how`、partial ⚠ 警示、`needs-clarification` 的问答线程与回复框（回复走 `.../feedback/:fid/reply`）。
+4. `ReviewCompare`：修改前 / 当前候选两列，同一时间点静帧并排（FB-03 stills），可切双播放器（两列 preview iframe 同起点）；采用/拒绝沿用现有 accept/reject 接口与“我已检查当前候选”确认约束。
+5. 无障碍：所有输入有 label；radio/checkbox/按钮原生键盘可达；状态用 ○◐◑✓ 符号 + 文字 + 左边框样式区分，不只靠颜色。
+- 交付：上述文件 + `scripts/tests/feedback/ui-feedback.audit.mjs`（无头 Edge + 独立临时 projects 目录 + 独立端口服务 + 独立 vite dev server + `helpers.mjs` 夹具引擎）。
+- 已运行：`node scripts/tests/feedback/ui-feedback.audit.mjs` 通过——带锚点意见（t 来自预览播放器 postMessage）→ 刷新后仍在 → agent 提问后人在界面回复 → stills 双列对比 + 双播放器切换 → 确认采用（accepted），全程无页面错误；`npm run build` 通过。
+- 诚实边界：本机无 `../pdoom-video` 参考仓库，UI 与渲染链路在 canvas 2D 夹具引擎上验证；真实引擎的时间广播解析（#info）与 ReviewCompare 画面需在具备参考仓库的机器补验（可并入 INT-00 遗留的 transition-integration-audit 补跑）。
 
-#### FB-03 MCP 意见与画面工具（独占 `src/server/mcp-feedback-tools.ts`（新建）；`mcp-tools.ts`/`mcp-server.ts` 注册由集成者合并；stills 渲染在 `render-worker.mjs` 增加任务种类，提给集成者）
+#### ✅ FB-03 MCP 意见与画面工具（2026-10-02 完成；独占 `src/server/mcp-feedback-tools.ts`（新建）与 `scripts/tests/feedback/` 下三个新文件；`mcp-tools.ts`/`mcp-server.ts` 注册、`render-worker.mjs` stills 任务、`index.mjs` stills 路由为最小接线，在本分支一并完成，集成者评审重点）
 
-1. `project_feedback_inbox({ projectId?, status? = 'pending' })`：调用 FB-01 的 inbox。不传 projectId 时返回所有工程的待办，这是 agent 的入口。
+1. `project_feedback_inbox({ projectId?, status? = 'pending' })`：调用 FB-01 inbox；不传 projectId 汇总所有工程，返回锚点/保留项/nextStep，是 agent 的入口。
 2. `project_feedback_ask({ projectId, targetKind, targetId, feedbackId, question })`。
-3. `project_shot_submit` / `project_transition_configure` 增加可选 `feedbackResponses`；保留 `addressedFeedbackIds` 兼容。
-4. `project_stills({ projectId, shotId|transitionId, times?: number[] (≤6), version: 'current'|'before-feedback', width? = 960 })`：后台 job 用真实引擎渲染指定时间点，缓存键 = 版本 key + t + 宽度。完成后，`project_job_get` 以 **MCP image content**（base64 PNG）返回图片，同时返回文件路径。默认时间点：意见锚点 `t`，再加窗口的 0/0.5/1。agent 借此“看到哪里要改”，并能对比修改前后。
-5. 每个工具描述写明“AI 不能接受意见”。
-- 验收：扩展 `scripts/mcp-server-test.mjs`，走真实 stdio：inbox 返回带锚点意见 → stills 返回 image 内容 → 带 feedbackResponses 提交 → validate → 意见为 responded 且 `response.how` 存在 → 其他镜头 codeHash 不变。
+3. `project_shot_submit` / `project_transition_configure` 增加可选 `feedbackResponses`（schema 由 `withFeedbackResponsesSchema` 注入）；保留 `addressedFeedbackIds` 兼容；`project_feedback_add` / `project_transition_feedback_add` 透传 `anchor/preserve`。
+4. `project_stills({ projectId, shotId|transitionId, times? ≤6, version: 'current'|'before-feedback', width? = 960 })`：后台 job（`POST /projects/:id/stills`）用与导出一致的引擎/加载路径渲染；缓存键 = 引擎 hash + 代码/依赖 + 版本 + t + 宽度；缩放在渲染页内用 canvas 完成（**不依赖 ffmpeg**）；完成后 `project_job_get` 以 MCP image content（base64 PNG）返回并附 `artifacts/<key>.png` 路径（MCP 进程需与工程服务一致的 `VIDEOGRAPH_PROJECTS`）。默认时间点 = 未接受意见锚点 t + 窗口 0/0.5/1（终点回退一帧）。stills 不受 `needs-generation` 拦截：意见加入即标记待改写，但 agent 恰要在改写前看到锚点现状。
+5. 每个新工具描述及 submit/configure 描述均写明“AI 不能接受意见”。
+- 验收（原计划扩展 `scripts/mcp-server-test.mjs`，该脚本硬编码旧机器 F:/ 路径与旧工坊队列、本机不可运行，等价验收落在 `scripts/tests/feedback/mcp-feedback-tools.test.mjs`）：真实 stdio 全链路通过——工具注册与描述 → 带锚点意见 → inbox → stills 返回 image 内容（校验 PNG magic 与宽度缩放）→ 提问 → `feedbackResponses` 提交 → before/current 同点产物不同 → validate done → 意见 responded 且 `response.how` 存在 → 其他镜头 codeHash 不变 → 越界时间/非法宽度/无基线版本被拒绝。
+- 诚实边界：同 FB-02——真实 pdoom 引擎的 stills 画面未在本机验证（无参考仓库/无 ffmpeg，后者已不需要）；夹具引擎走的是同一条 reference-server + render-worker + Edge 真实渲染路径。
 
 #### SKILL-01 shotcraft 纳入仓库并接入 MCP（独占 `skills/shotcraft/`、`scripts/skills/`、`scripts/tests/docs/`；MCP 注册提给集成者）
 
@@ -513,7 +516,8 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | FEEDBACK-02 人工反馈闭环收尾 | ✅ ZCode 会话认领（2026-09-30，用户指派），后端完成 | `src/server/project-store.mjs` 反馈/接受/拒绝语义、`scripts/project-store-test.mjs` | 拒绝候选按快照键完整恢复、不残留候选字段（shots 与 transitions 共用）；提交只标记明确响应的意见。`ProjectStudio.tsx` 源码弹窗勾选 UI 在集成者手中，交接要点：按 shot.feedback 渲染 pending 意见复选框，仅提交勾选项，勿自动全选 |
 | SKILL-01 shotcraft 纳入仓库 | ✅ ZCode 会话认领（2026-10-01）：已写代码+已运行验证，分支 feat/skill-shotcraft | skills/shotcraft/、scripts/skills/、scripts/tests/docs/（已交付）；MCP resources/craft_guide/respond_to_feedback 注册提给集成者 | 内容为原创蒸馏，许可归档见 skills/shotcraft/SOURCES.md（8 无许可仓库仅思路级、StuGRua 按受限处理）；分发用 scripts/skills/install.mjs；工具速查表由 sync-platform.mjs 从 MCP-GUIDE 生成，mcp-guide-sync 测试兜底（1 项占位等集成者注册后启用） |
 | INT-00 / FB-01 | ✅ 集成者（本会话）2026-10-02 完成，已合并 main | `src/server/feedback.mjs`、`scripts/tests/feedback/` | 见第三节 |
-| FB-02 / FB-03 / FB-04 | ⬜ 待认领；FB-01 契约已在 main，可直接开工，详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
+| FB-02 / FB-03 | ✅ ZCode 会话 2026-10-02 完成，分支 `feat/feedback-ui-mcp`（待评审合并）：FB-02 独占 `src/project/FeedbackComposer.tsx`、`ReviewCompare.tsx`；FB-03 独占 `src/server/mcp-feedback-tools.ts`、`scripts/tests/feedback/mcp-feedback-tools.test.mjs`、`ui-feedback.audit.mjs`、`helpers.mjs`。热点文件的最小接线也在本分支完成（`ProjectStudio.tsx` 替换接线、`reference-server.mjs` 时间广播、`render-worker.mjs` stills 任务、`index.mjs` stills 路由、`mcp-tools.ts`/`mcp-server.ts` 工具注册、`mcp-guide-sync.test.mjs` 合并读取两个工具源文件），集成者评审时重点看这几处 | 见第三节两个 ✅ 小节的命令与结果 |
+| FB-04 端到端验收 | ⬜ 待认领（QA-01 owner）；FB-02/FB-03 已就绪，可开工 | `scripts/tests/collaboration/`；只测，不改实现 | 见第三节 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05/06 待集成者接线与端到端验收 | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 | CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |

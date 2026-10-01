@@ -90,6 +90,24 @@ async function renderSegment(page, shot, output, fps, samples, doneFrames, total
   }
 }
 
+// 在渲染页内把 PNG 缩放到目标宽度：不引入 ffmpeg 依赖，真实引擎与测试夹具引擎同样适用。
+async function scalePng(page, base64, width) {
+  if (!width) return base64;
+  return page.evaluate(async ({ base64, width }) => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    if (bitmap.width === width) { bitmap.close(); return base64; }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = Math.max(1, Math.round(bitmap.height * width / bitmap.width));
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return canvas.toDataURL('image/png').split(',')[1];
+  }, { base64, width });
+}
+
 try {
   job.status = 'running'; job.startedAt = Date.now(); saveJob(projectId, job);
   for (const [pkg, version] of Object.entries(frozen.dependencies)) {
@@ -103,8 +121,22 @@ try {
   const hostHash = sha256(Buffer.concat(['reference-server.mjs', 'transition-runtime.mjs', 'transitions.mjs'].map((name) => readFileSync(new URL(name, import.meta.url)))));
   const fps = job.input.fps ?? frozen.output.fps;
   const samples = job.input.samples ?? frozen.output.samples;
-  const shots = frozen.shots.map((shot) => ({ ...shot, start: Math.round(shot.start * fps) / fps, end: Math.round(shot.end * fps) / fps }));
-  server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions: frozen.transitions, fps });
+  let shots = frozen.shots.map((shot) => ({ ...shot, start: Math.round(shot.start * fps) / fps, end: Math.round(shot.end * fps) / fps }));
+  let transitions = frozen.transitions;
+  const stillsInput = job.input.stills ?? null;
+  if (stillsInput?.version === 'before-feedback') {
+    // 修改前版本以 reviewBaseline 为唯一事实：快照没有的字段不保留候选值（与 preview 的回放口径一致）。
+    const target = stillsInput.targetKind === 'shot' ? frozen.shots.find((entry) => entry.id === stillsInput.targetId) : frozen.transitions.find((entry) => entry.id === stillsInput.targetId);
+    if (!target) throw new Error('stills 目标不存在');
+    if (!target.reviewBaseline) throw new Error('没有可比较的修改前版本');
+    if (stillsInput.targetKind === 'transition') {
+      transitions = frozen.transitions.map((entry) => entry.id === target.id ? { ...entry, ...structuredClone(target.reviewBaseline) } : entry);
+      const sources = target.reviewBaselineSources ?? {};
+      shots = shots.map((shot) => shot.id === target.fromShotId && sources.left ? { ...shot, ...structuredClone(sources.left) }
+        : shot.id === target.toShotId && sources.right ? { ...shot, ...structuredClone(sources.right) } : shot);
+    } else shots = shots.map((shot) => shot.id === target.id ? { ...shot, ...structuredClone(target.reviewBaseline) } : shot);
+  }
+  server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions, fps });
   browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
   signal.addEventListener('abort', () => { void browser?.close(); }, { once: true });
@@ -123,6 +155,44 @@ try {
     const error = await page.evaluate(() => window.__pdoom.error || window.__pdoom.errors.join('\n'));
     if (error) throw new Error(error);
   }
+  // FB-03 stills：用与导出相同的引擎/加载路径渲染指定时间点；缓存键 = 版本输入 + t + 宽度。
+  async function runStills() {
+    const target = stillsInput.targetKind === 'shot' ? shots.find((entry) => entry.id === stillsInput.targetId) : transitions.find((entry) => entry.id === stillsInput.targetId);
+    if (!target) throw new Error('stills 目标不存在');
+    const pair = stillsInput.targetKind === 'transition' ? transitionPair({ ...frozen, shots }, target) : null;
+    const incoming = pair ? null : transitions.find((entry) => entry.toShotId === target.id && entry.mode !== 'cut');
+    const previous = incoming ? transitionPair({ ...frozen, shots }, incoming).left : null;
+    // stills 不看 needs-generation：意见加入就会把镜头标为待改写，但当前源码仍可渲染，
+    // agent 恰恰要在改写前看到锚点处的现状；模块文件缺失会在 readCode/loadShot 处自然报错。
+    await loadShot(pair ? pair.right : target, previous);
+    const readCode = (shot) => readFileSync(join(dir, `engine/app/src/scenes/${shot.module}.ts`), 'utf8');
+    const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post, code: readCode(previous) } } : null;
+    const images = [];
+    for (const [index, t] of stillsInput.times.entries()) {
+      const time = Math.round(t * 1000) / 1000;
+      const key = sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(),
+        code: pair ? `${readCode(pair.left)}\n${readCode(pair.right)}` : readCode(target), dependency,
+        config: pair ? transitionConfig(target) : null, scope: 'stills', version: stillsInput.version,
+        target: pair ? { start: pair.left.start, end: pair.right.end } : { start: target.start, end: target.end, params: target.params, post: target.post },
+        t: time, width: stillsInput.width }));
+      const file = join(dir, 'artifacts', `${key}.png`);
+      if (!existsSync(file)) {
+        mkdirSync(join(dir, 'artifacts'), { recursive: true });
+        await page.evaluate((t) => window.__pdoom.still(t, 1, .2), time);
+        const png = await scalePng(page, await page.evaluate(() => window.__pdoom.png()), stillsInput.width);
+        writeFileSync(file, Buffer.from(png, 'base64'));
+      }
+      images.push({ t: time, file: `artifacts/${key}.png` });
+      progress(`静帧 ${time.toFixed(3)}s · ${index + 1}/${stillsInput.times.length}`, (index + 1) / stillsInput.times.length);
+    }
+    const errors = await page.evaluate(() => window.__pdoom.errors);
+    if (errors.length || browserErrors.length) throw new Error(`${stillsInput.targetId}: ${[...errors, ...browserErrors].join('\n')}`);
+    job.result = { revision: frozen.revision, stills: { ...stillsInput, images } };
+  }
+
+  if (job.kind === 'stills') {
+    await runStills();
+  } else {
   const targetTransition = job.kind === 'validate-transition' ? frozen.transitions.find((entry) => entry.id === job.input.transitionId) : null;
   if (job.kind === 'validate-transition' && !targetTransition) throw new Error('转场不存在');
   const wanted = targetTransition ? shots.filter((shot) => shot.id === targetTransition.toShotId) : job.kind === 'validate' ? shots.filter((shot) => shot.id === job.input.shotId) : shots;
@@ -200,7 +270,8 @@ try {
       '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k', '-af', 'apad', '-t', String(total / fps), '-movflags', '+faststart', output]);
     job.result = { file: `exports/${jobId}/pv.mp4`, frames: total, seconds: total / fps, fps, samples, revision: frozen.revision, transitions: frozen.transitions.map(({ id, fromShotId, toShotId, mode, duration, easing, direction }) => ({ id, fromShotId, toShotId, mode, duration, easing, direction })), reports };
     writeFileSync(join(outDir, 'manifest.json'), JSON.stringify({ ...job.result, engineHash: frozen.engineHash, audioHash: frozen.audio.hash, credits: frozen.credits }, null, 2));
-  } else job.result = { revision: frozen.revision, reports };
+  } else if (job.kind !== 'stills') job.result = { revision: frozen.revision, reports };
+  }
   job.status = 'done'; job.finishedAt = Date.now(); progress('完成', 1);
 } catch (error) {
   job.status = signal.aborted ? 'cancelled' : 'error'; job.error = String(error).slice(0, 12000); job.finishedAt = Date.now(); saveJob(projectId, job);

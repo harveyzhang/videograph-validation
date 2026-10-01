@@ -48,10 +48,15 @@ export async function startReferenceServer({ root = resolve(productRoot, '../pdo
       },
       transform(code, id) {
         if (shots && normalizePath(id).endsWith('/src/main.ts')) {
-          return code.replace('await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);', `if (onlySet) for (const [from, to] of ${JSON.stringify(dependencies)}) if (onlySet.has(to)) onlySet.add(from);\n await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);`)
+          const patched = code.replace('await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);', `if (onlySet) for (const [from, to] of ${JSON.stringify(dependencies)}) if (onlySet.has(to)) onlySet.add(from);\n await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);`)
             .replace('TIMELINE = engine.timeline;', `TIMELINE = !EXPORT && ONLY ? engine.timeline.filter(e => ONLY.split(",").includes(e.id)).map(e => ({...e, ...${JSON.stringify(shots.map(({ id, start, end }) => ({ id, start: Math.round(start * fps) / fps, end: Math.round(end * fps) / fps })))}.find(s => s.id === e.id)})) : engine.timeline;`)
             .replace('scrub.max = String(engine.duration);', 'scrub.min = String(params.get("rangeStart") ?? TIMELINE[0]?.start ?? 0); scrub.max = String(params.get("rangeEnd") ?? TIMELINE[TIMELINE.length - 1]?.end ?? engine.duration);')
             .replace('let loop: [number, number] | null = null;', 'let loop: [number, number] | null = ONLY && TIMELINE.length ? [Number(scrub.min), Number(scrub.max)] : null;');
+          // FB-02：被嵌入工程界面的播放器每 250ms 向父页广播当前时间，供“定位到当前预览时间”。
+          // 只在作为 iframe 嵌入时广播；时间来源优先引擎显式钩子 __videographTime()，否则解析 #info 开头的时间。
+          // targetOrigin 用 '*'：父页 origin（studio 端口）与预览服务器端口不同且不可知；
+          // 接收侧在 ProjectStudio 校验 event.origin === 预览 origin 且 event.source === 预览 iframe，载荷只是播放头时间。
+          return `${patched}\n;(function () {\n  if (window.top === window) return;\n  setInterval(() => {\n    try {\n      const hook = window.__videographTime;\n      const info = document.getElementById('info');\n      const parsed = info ? Number.parseFloat(info.textContent ?? '') : NaN;\n      const t = typeof hook === 'function' ? Number(hook()) : parsed;\n      if (Number.isFinite(t)) parent.postMessage({ type: 'videograph:time', t }, '*');\n    } catch (error) { /* 时间广播失败不影响播放器自身 */ }\n  }, 250);\n})();\n`;
         }
         if (!renderShots || !normalizePath(id).endsWith('/src/timeline.ts')) return;
         const imports = `import { wrapTransitionScene } from 'virtual:videograph-transitions';\n` + renderShots.map((shot, index) => `const vgLoad${index} = async () => { const mod = await import('/src/scenes/${shot.module}.ts'); return {default: wrapTransitionScene(mod.default, ${JSON.stringify({ start: shot.start, end: shot.end, logicalStart: shot.logicalStart, logicalEnd: shot.logicalEnd, incomingTransition: shot.incomingTransition })}, ${fps})}; };`).join('\n');

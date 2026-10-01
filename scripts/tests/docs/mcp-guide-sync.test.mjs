@@ -6,9 +6,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
-const skillDir = join(root, 'skills', 'shotcraft');
-const guidePath = join(root, 'docs', 'MCP-GUIDE.md');
-const toolsPath = join(root, 'src', 'server', 'mcp-tools.ts');
+const skillDir = join(root, 'skills/shotcraft');
+const guidePath = join(root, 'docs/MCP-GUIDE.md');
+const toolsPath = join(root, 'src/server/mcp-tools.ts');
+// FB-03 起工具定义分布在两个文件；指南一致性检查合并读取。
+const toolsCode = () => readFileSync(toolsPath, 'utf8') + '\n' + readFileSync(join(root, 'src/server/mcp-feedback-tools.ts'), 'utf8');
 const guideMissing = existsSync(guidePath) ? false : 'MCP-GUIDE.md 尚未提交（等集成者 INT-00），提交后本测试自动启用';
 
 function walk(dir, files = []) {
@@ -49,7 +51,7 @@ test('craft_guide 节选引擎：未知 topic 报错', async () => {
 
 test('MCP 工具名与指南 §3 一致', { skip: guideMissing }, () => {
   const guide = readFileSync(guidePath, 'utf8');
-  const code = readFileSync(toolsPath, 'utf8');
+  const code = toolsCode();
   const codeTools = [...code.matchAll(/name: '([a-z_]+)'/g)].map((m) => m[1]);
   const section3 = guide.split(/^## 3\. 工具参考.*$/m)[1]?.split(/^## \d/m)[0] ?? '';
   const guideTools = [...section3.matchAll(/^\| `([a-z_]+)` \|[^\n]*$/gm)].map((m) => m[1]);
@@ -66,7 +68,7 @@ test('SKILL.md toolset 与指南一致；路线 B 工具表已生成且覆盖全
   const platform = readFileSync(join(skillDir, 'references', 'platform-videograph.md'), 'utf8');
   const block = platform.split(/<!-- BEGIN:generated-from-MCP-GUIDE[^>]*-->/)[1]?.split(/<!-- END:generated-from-MCP-GUIDE -->/)[0] ?? '';
   assert.ok(block.trim(), '生成块为空：跑 node scripts/skills/sync-platform.mjs');
-  const code = readFileSync(toolsPath, 'utf8');
+  const code = toolsCode();
   for (const name of [...code.matchAll(/name: '([a-z_]+)'/g)].map((m) => m[1])) {
     assert.ok(block.includes(`\`${name}\``), `路线 B 工具速查缺 ${name}`);
   }

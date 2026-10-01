@@ -6,6 +6,7 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, unlin
 import { join, extname, resolve, dirname } from 'node:path';
 import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, askFeedback, replyFeedback, feedbackInbox, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
 import { startReferenceServer } from './reference-server.mjs';
+import { feedbackTargetWindow } from './feedback.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
@@ -41,15 +42,41 @@ function pump() {
 }
 function enqueue(projectId, kind, options) {
   const project = readProject(projectId);
-  if (!['validate', 'validate-transition', 'export'].includes(kind)) throw new ProjectError('invalid job kind');
+  if (!['validate', 'validate-transition', 'export', 'stills'].includes(kind)) throw new ProjectError('invalid job kind');
   if (kind === 'validate-transition' && !project.transitions.some((transition) => transition.id === options.transitionId)) throw new ProjectError('transition not found', 404);
   if (kind === 'validate' && !project.shots.some((shot) => shot.id === options.shotId)) throw new ProjectError('shot not found', 404);
   if (kind === 'export' && [...project.shots, ...project.transitions].some((target) => (target.feedback ?? []).some((note) => note.status !== 'accepted'))) throw new ProjectError('存在未接受的镜头或转场意见：请先配置/改写、校验并确认采用。', 409);
   if (kind === 'export' && project.transitions.some((transition) => transition.status === 'needs-generation')) throw new ProjectError('有转场指导尚未落实为效果配置', 409);
+  let stills = null;
+  if (kind === 'stills') {
+    const shotTarget = options.shotId ? project.shots.find((shot) => shot.id === options.shotId) : null;
+    const transitionTarget = !shotTarget && options.transitionId ? project.transitions.find((transition) => transition.id === options.transitionId) : null;
+    if (!shotTarget && !transitionTarget) throw new ProjectError('必须指定存在的 shotId 或 transitionId', 404);
+    const targetKind = shotTarget ? 'shot' : 'transition';
+    const target = shotTarget ?? transitionTarget;
+    if (options.version === 'before-feedback' && !target.reviewBaseline) throw new ProjectError('没有可比较的修改前版本');
+    const pair = targetKind === 'transition' ? transitionPair(project, target) : null;
+    const window = feedbackTargetWindow(project, target, targetKind, pair);
+    const fps0 = project.output?.fps ?? 30;
+    const tolerance = 0.5 / fps0;
+    const inWindow = (t) => Number.isFinite(t) && t >= window.start - tolerance && t <= window.end + tolerance;
+    let times = options.times;
+    if (times === undefined || times === null) {
+      // 默认时间点：未接受意见的锚点 t，再加窗口的 0 / 0.5 / 1（终点回退一帧，避免停在窗口外）。
+      const last = Math.max(window.start, window.end - 1 / fps0);
+      const anchors = (target.feedback ?? []).filter((note) => note.status !== 'accepted' && inWindow(note.anchor?.t)).map((note) => Math.min(note.anchor.t, last));
+      times = [...anchors, window.start, window.start + (window.end - window.start) * .5, last];
+    }
+    if (!Array.isArray(times) || !times.length || times.length > 6 || !times.every(inWindow)) throw new ProjectError('times 必须是落在目标时间窗内、最多 6 个的时间点');
+    times = [...new Set(times.map((t) => Math.round(t * 1000) / 1000))];
+    const width = options.width ?? 960;
+    if (!Number.isInteger(width) || width < 320 || width > 1920) throw new ProjectError('width 必须是 320..1920 的整数像素');
+    stills = { targetKind, targetId: target.id, times, version: options.version === 'before-feedback' ? 'before-feedback' : 'current', width };
+  }
   const fps = options.fps ?? project.output.fps;
   const samples = options.samples ?? project.output.samples;
   if (![24, 30, 60].includes(fps) || ![1, 4, 12].includes(samples)) throw new ProjectError('fps supports 24/30/60; samples supports 1/4/12');
-  const job = { id: randomUUID(), projectId, kind, status: 'queued', progress: 0, detail: '等待渲染进程', createdAt: Date.now(), input: { project, shotId: options.shotId, transitionId: options.transitionId, fps, samples } };
+  const job = { id: randomUUID(), projectId, kind, status: 'queued', progress: 0, detail: '等待渲染进程', createdAt: Date.now(), input: { project, shotId: options.shotId, transitionId: options.transitionId, fps, samples, ...(stills ? { stills } : {}) } };
   saveJob(projectId, job);
   queue.push({ projectId, jobId: job.id });
   pump();
@@ -57,7 +84,7 @@ function enqueue(projectId, kind, options) {
 }
 function publicJob(job) {
   const { input, ...result } = job;
-  return { ...result, inputRevision: input.project.revision, shotId: input.shotId, transitionId: input.transitionId, fps: input.fps, samples: input.samples };
+  return { ...result, inputRevision: input.project.revision, shotId: input.shotId, transitionId: input.transitionId, fps: input.fps, samples: input.samples, ...(input.stills ? { stills: input.stills } : {}) };
 }
 async function body(req, limit = 1000000) {
   const buffers = []; let size = 0;
@@ -138,6 +165,7 @@ const server = createServer(async (req, res) => {
       json(res, publicJob(readJob(id, job.id))); return;
     }
     if (parts[2] === 'validate' && req.method === 'POST') { json(res, enqueue(id, 'validate', await body(req)), 202); return; }
+    if (parts[2] === 'stills' && req.method === 'POST') { json(res, enqueue(id, 'stills', await body(req)), 202); return; }
     if (parts[2] === 'render' && req.method === 'POST') { json(res, enqueue(id, 'export', await body(req)), 202); return; }
     if (parts[2] === 'shots' && safeId(parts[3])) {
       if (parts[4] === 'lyrics' && req.method === 'GET') { json(res, readShotLyricContext(id, parts[3])); return; }
