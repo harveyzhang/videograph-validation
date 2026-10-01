@@ -91,7 +91,7 @@ export function createProjectFromAudio(audioPath, name) {
   const files = hashTree(engine);
   const engineHash = sha256(JSON.stringify({ files, dependencies }));
   writeFileSync(join(dir, 'engine-manifest.json'), JSON.stringify({ schema: 1, engineHash, dependencies, files }, null, 2));
-  const song = JSON.parse(readFileSync(join(productRoot, 'src/shot/full-song.json'), 'utf8'));
+  const song = JSON.parse(readFileSync(join(productRoot, 'src/song/data/full-song.json'), 'utf8'));
   const project = {
     id, name: name?.trim() || basename(path, extname(path)), schema: 'videograph-project/v1', revision: 0,
     createdAt: Date.now(), updatedAt: Date.now(), engineHash, dependencies,

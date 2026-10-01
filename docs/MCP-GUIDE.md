@@ -4,7 +4,9 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph-pdoom` 0.1.0 · 状态：§3 为已实现工具；§6 为计划中工具，未实现前不要调用。
+toolset: 2026-10-01 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具；§6 为计划中工具，未实现前不要调用。
+
+> CLEANUP-01（2026-10-01）：旧演示视图（单镜头工坊 / P(DOOM) 教学）的 `shot_queue_*`、`shot_cards_*`、`pdoom_*`、`lyric_research_draft` 工具已随代码一并移除；本指南只覆盖真实工作台的 `project_*` 工具。
 
 ## 1. 启动与连接
 
@@ -24,9 +26,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
       "command": "node",
       "args": ["--experimental-strip-types", "--no-warnings", "F:/aicg/video-graph-demo/src/pdoom/mcp-server.ts"],
       "env": {
-        "VIDEOGRAPH_SERVICE_URL": "http://127.0.0.1:5191",
-        "VIDEOGRAPH_QUEUE": "F:/aicg/video-graph-demo/.queue",
-        "PDOOM_ROOT": "F:/aicg/video-graph-demo"
+        "VIDEOGRAPH_SERVICE_URL": "http://127.0.0.1:5191"
       }
     }
   }
@@ -99,11 +99,6 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_job_cancel` | `projectId, jobId` | 取消排队或运行中的任务 |
 
 产物文件位于 `projects/<projectId>/<file>`（如 `artifacts/<key>.png`、`exports/<jobId>/pv.mp4`），同机 agent 可直接读取 PNG 做视觉检查。
-
-### 旧工坊与参考仓库（兼容，不用于新工程）
-
-`shot_queue_list / shot_queue_get / shot_queue_submit / shot_queue_reject / shot_cards_read / shot_cards_update_prompt`：旧工坊 `draw(ctx,f,api)` 文件队列。
-`pdoom_inspect_project / pdoom_run_analysis / pdoom_render / pdoom_blackboard_contract / lyric_research_draft`：只读参考仓库任务与研究草稿。
 
 ## 4. 标准流程：响应人的修改意见
 

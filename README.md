@@ -23,14 +23,15 @@ npm run mcp:pdoom     # MCP stdio 工具入口
 
 工程服务和开发服务分别运行于终端。先启动 service，再打开工程界面。用户素材、数据库、服务令牌与导出文件保留在本机，不提交 Git。
 
-当前“仅 BGM 建工程”只支持通过字节指纹匹配 `pdoom-video/audio/pdoom.mp3`，使用已有词级对齐数据；不声称已对任意新歌曲重新识别歌词。旧工坊 `?view=shot` 的音频文件需在本机置于 `public/audio/pdoom.mp3`，不随仓库分发。
+当前“仅 BGM 建工程”只支持通过字节指纹匹配 `pdoom-video/audio/pdoom.mp3`，使用已有词级对齐数据；不声称已对任意新歌曲重新识别歌词。任意歌曲的本地分析管线见 ROADMAP 的 SONG 冲刺。
 
 ## 检查
 
 ```sh
 npm run build
-node --test scripts/project-store-test.mjs   # 轻量领域测试，不启动服务或浏览器
-npm run audit                              # 六项旧工坊回归；需启动 dev
+node --test scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs   # 轻量领域测试，不启动服务或浏览器
+node --test scripts/tests/brand scripts/tests/collaboration scripts/tests/docs scripts/tests/feedback   # 领域套件：brand / 协作 / 文档同步 / 反馈契约
+npm run audit                              # 工程工作台浏览器验收；需先启动 service 和 dev
 npm run audit:reference                    # 真实引擎验收；需只读参考目录
 ```
 

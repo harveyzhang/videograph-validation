@@ -31,9 +31,8 @@
 | 全帧后期转场 | `fade`（压黑）/ `flash`（白闪）/ `zoom` / `invert` 作为镜头返回值，由引擎统一施加 |
 | paper/明暗模式 | 通知 UI 层换配色（亮底板切换也是转场的一部分） |
 
-VideoGraph 平台上这两者的对应：全引擎管线=引擎自动叠化+镜头自转场+`project_transition_configure`
-（cut/dissolve/wipe/dip 四种参数化转场）；工坊 mini-engine 没有引擎级转场——**转场全部由相邻
-镜头的首末帧自己完成**（见协议层），这是工坊卡片的默认工作方式。
+VideoGraph 平台上：全引擎管线=引擎自动叠化+镜头自转场+`project_transition_configure`
+（cut/dissolve/wipe/dip 四种参数化转场）。协议层 handshake 是镜头自转场的通用手法。
 
 ## 3. 协议层：handshake 目录（转场的真正内容）
 
