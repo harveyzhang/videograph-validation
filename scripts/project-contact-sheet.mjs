@@ -11,7 +11,7 @@ const projectId = process.argv[2];
 if (!projectId) throw new Error('usage: node scripts/project-contact-sheet.mjs <projectId>');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const client = new Client({ name: 'videograph-visual-audit', version: '1.0.0' });
-const transport = new StdioClientTransport({ command: process.execPath, args: ['--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: root, stderr: 'pipe' });
+const transport = new StdioClientTransport({ command: process.execPath, args: ['--env-file-if-exists=.env.local', '--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: root, env: process.env, stderr: 'pipe' });
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
 async function call(name, args) {
   const response = await client.callTool({ name, arguments: args });
@@ -28,31 +28,40 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(preview.url + '/?export=1');
-  await page.waitForFunction(() => window.__pdoom?.ready || window.__pdoom?.error, null, { timeout: 120000 });
-  const result = await page.evaluate(async (shots) => {
-    const p = window.__pdoom;
-    if (p.error) throw new Error(p.error);
-    const sheet = document.createElement('canvas');
-    const cw = 384, ch = 216, label = 28, pad = 8, cols = 4;
-    sheet.width = cols * (cw + pad) + pad;
-    sheet.height = Math.ceil(shots.length / cols) * (ch + label + pad) + pad;
-    const ctx = sheet.getContext('2d');
-    ctx.fillStyle = '#151517'; ctx.fillRect(0, 0, sheet.width, sheet.height);
-    const source = document.getElementById('c');
-    let checked = 0;
-    for (let i = 0; i < shots.length; i++) {
-      const shot = shots[i];
-      for (const ratio of [0, .25, .45, .75, .99]) { p.still(shot.start + (shot.end - shot.start) * ratio, 1, .2); checked++; }
+  // 一次只加载当前镜头及必要的转场依赖，避免整条时间线同时占用 GPU 资源。
+  const frames = [];
+  for (const shot of project.shots) {
+    await page.goto(`${preview.url}/?export=1&only=${encodeURIComponent(shot.id)}`);
+    await page.waitForFunction(() => window.__pdoom?.ready || window.__pdoom?.error, null, { timeout: 120000 });
+    const image = await page.evaluate(async (shot) => {
+      const p = window.__pdoom;
+      if (p.error) throw new Error(p.error);
+      for (const ratio of [0, .25, .45, .75, .99]) p.still(shot.start + (shot.end - shot.start) * ratio, 1, .2);
       if (p.errors.length) throw new Error(p.errors.join('\n'));
       p.still(shot.start + (shot.end - shot.start) * .45, 1, .2);
       await p.engine.readPixelsAsync();
+      const canvas = document.createElement('canvas'); canvas.width = 384; canvas.height = 216;
+      canvas.getContext('2d').drawImage(document.getElementById('c'), 0, 0, 384, 216);
+      return canvas.toDataURL('image/png');
+    }, shot);
+    frames.push({ title: shot.title, image });
+  }
+  await page.goto('about:blank');
+  const result = await page.evaluate(async (frames) => {
+    const sheet = document.createElement('canvas');
+    const cw = 384, ch = 216, label = 28, pad = 8, cols = 4;
+    sheet.width = cols * (cw + pad) + pad;
+    sheet.height = Math.ceil(frames.length / cols) * (ch + label + pad) + pad;
+    const ctx = sheet.getContext('2d');
+    ctx.fillStyle = '#151517'; ctx.fillRect(0, 0, sheet.width, sheet.height);
+    for (let i = 0; i < frames.length; i++) {
+      const image = new Image(); image.src = frames[i].image; await image.decode();
       const x = pad + (i % cols) * (cw + pad), y = pad + Math.floor(i / cols) * (ch + label + pad);
-      ctx.drawImage(source, x, y + label, cw, ch);
-      ctx.fillStyle = '#EEE9DF'; ctx.font = '14px Arial'; ctx.fillText(`${String(i + 1).padStart(2, '0')} ${shot.title}`, x + 3, y + 20, cw - 6);
+      ctx.drawImage(image, x, y + label, cw, ch);
+      ctx.fillStyle = '#EEE9DF'; ctx.font = '14px Arial'; ctx.fillText(`${String(i + 1).padStart(2, '0')} ${frames[i].title}`, x + 3, y + 20, cw - 6);
     }
-    return { png: sheet.toDataURL('image/png').split(',')[1], checked, errors: p.errors };
-  }, project.shots);
+    return { png: sheet.toDataURL('image/png').split(',')[1], checked: frames.length * 5, errors: [] };
+  }, frames);
   assert.equal(result.checked, project.shots.length * 5);
   assert.deepEqual(result.errors, []);
   assert.deepEqual(errors, []);

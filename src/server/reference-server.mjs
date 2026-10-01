@@ -49,7 +49,7 @@ export async function startReferenceServer({ root = resolve(productRoot, '../pdo
       transform(code, id) {
         if (shots && normalizePath(id).endsWith('/src/main.ts')) {
           return code.replace('await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);', `if (onlySet) for (const [from, to] of ${JSON.stringify(dependencies)}) if (onlySet.has(to)) onlySet.add(from);\n await engine.init(onlySet ? (e) => onlySet.has(e.id) : undefined);`)
-            .replace('TIMELINE = engine.timeline;', `TIMELINE = !EXPORT && ONLY ? engine.timeline.filter(e => ONLY.split(",").includes(e.id)).map(e => ({...e, ...${JSON.stringify(shots.map(({ id, start, end }) => ({ id, start, end })))}.find(s => s.id === e.id)})) : engine.timeline;`)
+            .replace('TIMELINE = engine.timeline;', `TIMELINE = !EXPORT && ONLY ? engine.timeline.filter(e => ONLY.split(",").includes(e.id)).map(e => ({...e, ...${JSON.stringify(shots.map(({ id, start, end }) => ({ id, start: Math.round(start * fps) / fps, end: Math.round(end * fps) / fps })))}.find(s => s.id === e.id)})) : engine.timeline;`)
             .replace('scrub.max = String(engine.duration);', 'scrub.min = String(params.get("rangeStart") ?? TIMELINE[0]?.start ?? 0); scrub.max = String(params.get("rangeEnd") ?? TIMELINE[TIMELINE.length - 1]?.end ?? engine.duration);')
             .replace('let loop: [number, number] | null = null;', 'let loop: [number, number] | null = ONLY && TIMELINE.length ? [Number(scrub.min), Number(scrub.max)] : null;');
         }

@@ -37,7 +37,7 @@ const designs = [
   ['outro', '审计关闭 / 无人签字', 'close', 'AUDIT CLOSED', false, 1, '机械光圈收拢到空心结论，出现 THE LAST AUDIT 与 NO HUMAN SIGNATURE WAS FOUND，随后显示作者/引擎与音乐权利提示并淡出。'],
 ];
 const client = new Client({ name: 'videograph-original-author', version: '1.0.0' });
-const transport = new StdioClientTransport({ command: process.execPath, args: ['--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: fileURLToPath(new URL('..', import.meta.url)), stderr: 'pipe' });
+const transport = new StdioClientTransport({ command: process.execPath, args: ['--env-file-if-exists=.env.local', '--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: fileURLToPath(new URL('..', import.meta.url)), env: process.env, stderr: 'pipe' });
 async function call(name, args) {
   const response = await client.callTool({ name, arguments: args });
   const text = response.content.filter((item) => item.type === 'text').map((item) => item.text).join('\n');

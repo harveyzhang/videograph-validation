@@ -3,16 +3,19 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, resolve, dirname } from 'node:path';
 import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
 import { startReferenceServer } from './reference-server.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
-const allowedOrigins = new Set(['http://127.0.0.1:5188', 'http://localhost:5188']);
+const allowedOrigins = new Set((process.env.VIDEOGRAPH_STUDIO_ORIGINS ?? 'http://127.0.0.1:5188,http://localhost:5188').split(',').map((origin) => origin.trim()).filter(Boolean));
+for (const origin of allowedOrigins) {
+  const url = new URL(origin);
+  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname) || url.origin !== origin) throw new Error('Studio origins must be explicit local HTTP origins');
+}
 const serviceToken = randomUUID() + randomUUID();
-mkdirSync(join(productRoot, '.cache'), { recursive: true });
-writeFileSync(join(productRoot, '.cache/service-token'), serviceToken, { mode: 0o600 });
+const tokenPath = resolve(process.env.VIDEOGRAPH_SERVICE_TOKEN_FILE ?? join(productRoot, '.cache/service-token'));
 const previews = new Map();
 const queue = [];
 let active = null;
@@ -99,7 +102,7 @@ const server = createServer(async (req, res) => {
     }
     const artifactRead = req.method === 'GET' && parts[0] === 'projects' && parts[2] === 'files';
     if (url.pathname !== '/health' && !artifactRead && req.headers.authorization !== `Bearer ${serviceToken}`) throw new ProjectError('local service authorization required', 401);
-    if (url.pathname === '/health') { json(res, { ok: true, projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'known-BGM fingerprint cache' }); return; }
+    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v2-lyrics-transitions', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'known-BGM fingerprint cache' }); return; }
     if (url.pathname === '/projects' && req.method === 'GET') { json(res, { projects: listProjects() }); return; }
     if (url.pathname === '/projects' && req.method === 'POST') {
       const input = await body(req); json(res, createProjectFromAudio(input.audioPath, input.name), 201); return;
@@ -185,6 +188,11 @@ const server = createServer(async (req, res) => {
         const window = transitionWindow(context, selectedTransition);
         const { left, right } = transitionPair(context, selectedTransition);
         range = { start: Math.max(left.start, window.start - .4), end: Math.min(right.end, window.end + .4), only: `${left.id},${right.id}` };
+      } else if (options.shotId) {
+        const selectedShot = shots.find((shot) => shot.id === options.shotId);
+        if (!selectedShot) throw new ProjectError('shot not found', 404);
+        range = { start: Math.round(selectedShot.start * project.output.fps) / project.output.fps,
+          end: Math.round(selectedShot.end * project.output.fps) / project.output.fps, only: selectedShot.id };
       }
       json(res, { url: preview.server.url, revision: preview.revision, range }); return;
     }
@@ -197,12 +205,18 @@ const server = createServer(async (req, res) => {
   } catch (error) { if (!res.headersSent) json(res, { error: String(error.message ?? error) }, error.status ?? 500); else res.destroy(); }
 });
 
-// 不自动重跑状态不明的旧进程；中断记录保留，用户可重新发起且命中已完成分段缓存。
-for (const project of listProjects()) for (const job of listJobs(project.id)) {
-  if (job.status === 'queued') queue.push({ projectId: project.id, jobId: job.id });
-  else if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启，旧渲染进程未恢复；可重新发起并复用已完成分段。' });
-}
-server.listen(port, '127.0.0.1', () => { console.log(`VideoGraph project service http://127.0.0.1:${port}`); pump(); });
+// 只有成功取得端口后才发布令牌/恢复任务；启动冲突不能破坏已有服务的认证或任务状态。
+server.on('error', (error) => { console.error(error); process.exitCode = 1; });
+server.listen(port, '127.0.0.1', () => {
+  mkdirSync(dirname(tokenPath), { recursive: true });
+  writeFileSync(tokenPath, serviceToken, { mode: 0o600 });
+  // 不盲目重跑状态不明的旧进程；已完成分段仍可复用。
+  for (const project of listProjects()) for (const job of listJobs(project.id)) {
+    if (job.status === 'queued') queue.push({ projectId: project.id, jobId: job.id });
+    else if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启，旧渲染进程未恢复；可重新发起并复用已完成分段。' });
+  }
+  console.log(`VideoGraph project service http://127.0.0.1:${port}`); pump();
+});
 async function shutdown() {
   closing = true;
   active?.child.send('cancel');

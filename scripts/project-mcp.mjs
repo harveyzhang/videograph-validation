@@ -7,7 +7,7 @@ const [name, raw = '{}', output] = process.argv.slice(2);
 if (!name) throw new Error('usage: node scripts/project-mcp.mjs tool-name JSON-or-@file [new-output-file]');
 const args = JSON.parse(raw.startsWith('@') ? readFileSync(raw.slice(1), 'utf8') : raw);
 const client = new Client({ name: 'videograph-local-operator', version: '1.0.0' });
-const transport = new StdioClientTransport({ command: process.execPath, args: ['--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: fileURLToPath(new URL('..', import.meta.url)), stderr: 'pipe' });
+const transport = new StdioClientTransport({ command: process.execPath, args: ['--env-file-if-exists=.env.local', '--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: fileURLToPath(new URL('..', import.meta.url)), env: process.env, stderr: 'pipe' });
 try {
   await client.connect(transport);
   const response = await client.callTool({ name, arguments: args });

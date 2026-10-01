@@ -116,6 +116,59 @@
 
 #### SKILL-01 shotcraft 纳入仓库并接入 MCP（独占 `skills/shotcraft/`、`scripts/skills/`、`scripts/tests/docs/`；MCP 注册提给集成者）
 
+**质量审阅（2026-10-01，子代理只读审阅，评分 6/10）**
+
+技法部分可靠。抽查 12 条引擎论断（DEFAULT_POST、Archivo 宽度 62–125、GLSL_COMMON hatch/engrave/heat、子帧序列、LineBatch 等），全部与 pdoom 源码一致。扣分集中在平台说明过时、单曲绑定、缺少反馈工作流三方面。下表按严重度排列，修改内容都在 SKILL-01 内完成：
+
+| 级别 | 问题与证据 | 修改 |
+|---|---|---|
+| 高 | `platform-videograph.md:3` 称 HANDOFF.md 为权威；:6-16 将旧工坊路线 C 与全引擎路线 B 并列；description 含“工坊” | 权威源改为 `docs/MCP-GUIDE.md`；路线 C 移到 `legacy-workshop.md` 附录，并注明“新工程不用”；description 删除“工坊/队列” |
+| 高 | 路线 B 与 `mcp-tools.ts` 不一致：lyricPlan 漏了必填的 `name`，又把可选的 `kind` 写成必填；:66 教 agent“先 update 解锁”，违反人工解锁规则；缺 transition_feedback_add、job_cancel、includeAnalysis、before-feedback；缺状态机，也没写 render 409 和二次 submit 使旧响应失效；工具前缀写死为 `mcp__videograph-pdoom__` | 路线 B 全部由 `sync-platform.mjs` 从 MCP-GUIDE 生成，不再手写；工具名不带客户端前缀 |
+| 高 | `:40` 把 `f.a` 写成“六路包络”，实际是 8 路（rms/low/mid/high/vocal/drums/bass/other），还漏了 dt/seeked/preroll/barPhase/handlesTransition | 不手抄字段，改为引用工程内 `engine/docs/ENGINE.md`，并提示用 `project_shot_source` 返回的 contract 为准 |
+| 高 | 缺“按人工意见改镜头”的流程，原文只有 :63-64 两行 | 新增 `references/feedback-workflow.md`，与 MCP-GUIDE §4 对齐。内容：读意见、锚点、保留项与 reviewBaseline；只改目标；`feedbackResponses` 逐条说明；只列真正处理的意见；最多修两轮（与 `MAX_SHOT_REPAIRS = 2` 一致）；AI 不能接受；意见含糊时用 ask 澄清。附 2 个正反例 |
+| 高 | 单曲美术被写成“通用法则”：SKILL.md:27-29 的墨黑/骨白/#FF4D12，:47 的“风格圣经”= pdoom TREATMENT；`pipeline-playbook.md:109` 的“歌词不上屏”又与卡拉OK“硬约束”冲突 | 五条法则只保留真正通用的：确定性、时间从数据推导、强调色纪律（不指定色值）、一镜一主角、节拍律动。pdoom 调色板与卡拉OK规则改为 `styles/pdoom-default.md` 默认风格包，可被工程风格和 prompt 覆盖；卡拉OK写成“有歌词且风格要求时的规则” |
+| 中 | 单曲绑定：:73 示例用 `lyrics.get(文本)`（导致 15 个场景换歌即抛错）；:183-186 用 full-song.json/cutAtLine；fx-tx:40、media-styles:164 用 pdoom 歌词作例；shots.md 按 pdoom 场景命名；没提 CJK 字体 | 示例改为 `lyrics.linesIn(start,end)`、按词索引和拍点取时间，`ly.get` 只用于本工程确认存在的歌词；新增“换歌注意”一节，覆盖器乐段、中文字级与字体、无 words 时回退到行级、不硬编码秒数；范式名改为功能名，pdoom 场景只作“范例”括注 |
+| 中 | `fx-tx-addendum.md` 与 playbook §3/§4 重复；B3“禁 cross-dissolve”与 transitions.md:14 及平台 dissolve 冲突 | 撤销 addendum，内容分别并入 effects/transitions/pipeline；冲突改为“默认偏好 handshake，dissolve/dip 是平台内建选项，用于情绪段或兜底” |
+| 中 | 本机绝对路径（SKILL.md:10/:47、media-styles:3、playbook:4/:143、fx-tx:3） | 改为上游仓库 URL 加 SOURCES.md 条目；测试禁止出现 `C:\Users`、`F:\aicg` |
+| 中 | 许可：JohnHeibel/PDoomVideo 无 LICENSE，media-styles:21 的 paint 签名与 flushLetters hack、fx-tx:11 的 `randomSeed(1000+floor(T·BOIL))`（对应其 core.js:195）接近原文；nickmontag 的代码为 MIT，但歌词/分镜/风格笔记为 CC BY-NC | 无许可来源只保留用自己的话写的技法描述并重写示例；NC 来源的风格笔记只标出处、不转述细节；ClaudeAnimationBase 已确认为 MIT，可保留并署名 |
+| 低 | description 约 800 字节，关键词堆砌 | 压到约 250 字：触发场景（为代码渲染的音乐视频/宣发片设计或修改镜头、转场、特效、媒介风格；处理 VideoGraph 镜头意见）加一句能力说明 |
+| 低 | 没有最小 Scene 骨架和提交前自检清单；playbook §5/§7 的 Ruby 执行契约、实录派、prompt 词汇表与本平台关系弱；总量约 100KB | 新增 `templates/scene-template.ts`（通用、只用窗口歌词与拍点，与 SONG-03 的 `_window-template.ts` 同源）和自检清单；删除或下沉 SKILL.md:49-56 与 playbook §1/§5/§7/§8；media-styles 保留核心几种，其余放进 `media-styles-extra.md`，按需读取。目标总量 ≤60KB，SKILL.md ≤60 行 |
+
+**目标结构**
+
+```
+skills/shotcraft/
+  SKILL.md                 # ≤60 行；frontmatter: name/description/version/toolset
+  SOURCES.md               # 每个 reference 的来源仓库、许可、处理方式（保留/改写/仅出处）
+  references/
+    feedback-workflow.md   # 新增，优先读
+    shots.md  transitions.md  effects.md  pipeline.md
+    media-styles.md  media-styles-extra.md
+    platform-videograph.md # 生成文件，头部注明“勿手改”
+    legacy-workshop.md     # 原路线 C
+  styles/pdoom-default.md  # 默认风格包（调色板/卡拉OK/辉光纪律）
+  templates/scene-template.ts
+```
+
+**适配步骤（按顺序；每步都要构建并测试通过）**
+
+1. 复制原目录到 `skills/shotcraft/`，作为第一个提交，原样保留，方便看 diff。
+2. 处理许可：写 SOURCES.md，改写或删除有问题的段落。下方“待确认”列出的仓库许可未核实，相关段落先改写为仅保留技法描述。
+3. 结构调整：撤销 addendum；拆出 styles、legacy-workshop、media-styles-extra；精简 SKILL.md 和 description。
+4. 内容修正：通用法则、换歌注意、Frame 改为引用 ENGINE.md；写 feedback-workflow.md 与 scene-template.ts。scene-template 要用真实引擎跑 `project_validate` 并通过。
+5. 实现 `sync-platform.mjs` 生成平台说明，并加上版本、toolset 字段。
+6. 分发：install 脚本、MCP resources、craft_guide、respond_to_feedback prompt（见下方原第 3 点）。
+7. 回写源头：用户原来的 `C:\Users\Martis\.zcode\skills\shotcraft` 不直接覆盖。install 脚本加 `--user` 参数时，先备份原目录再替换，需要用户确认。
+8. 效果验证：让一个新的 agent 只靠 skill 加 MCP，处理一条带锚点的测试意见。记录它是否读了正确的文件、有没有越界修改、有没有提交自检，作为 FB-04 的子项。
+
+**待用户确认：**
+
+- opus-video-audio-skill、Pdoom-video-anime-version、awesome-opus-5-5-video-prompts 三个仓库的许可尚未核实。
+- pdoom 调色板是否作为产品级的默认风格包保留（建议保留，并标注为“默认，可替换”）。
+- 用户级 skill 目录是否改为由仓库版本覆盖（建议改为由仓库单向同步）。
+
+**原计划要点（保留）：**
+
 1. **来源与许可先行**：把 `C:\Users\Martis\.zcode\skills\shotcraft\` 复制到仓库 `skills/shotcraft/`，并新增 `skills/shotcraft/SOURCES.md`，逐个 references 文件标注技法来源仓库及其许可。对无 license 或 NC 许可的仓库（JohnHeibel/PDoomVideo、nickmontag 等），只保留技法描述与自写示例，删去逐字复制的代码片段；无法判断的段落列给用户确认。完成前不推送公开远端。
 2. 单一事实源：`platform-videograph.md` 路线 B 改为由 `docs/MCP-GUIDE.md` 生成（`scripts/skills/sync-platform.mjs`），路线 C 保留。`SKILL.md` frontmatter 增加 `version` 与 `toolset`（与 MCP-GUIDE 的 toolset 行一致）。
 3. 分发给 agent，三条通道：
@@ -139,6 +192,166 @@
 - 改动 MCP 工具名、参数或语义 → 同一提交更新 `docs/MCP-GUIDE.md`（工具表、流程、toolset 行），再运行 `node scripts/skills/sync-platform.mjs`；`mcp-guide-sync` 测试兜底。
 - 改动 skill → bump `skills/shotcraft/SKILL.md` 的 version，并重新运行 install 脚本。
 - 完成工作包 → 在本节将状态改为 ✅，附运行过的命令与结果。
+
+### 并行冲刺 SONG：任意歌曲拆解与建工程（2026-10-01 规划）
+
+目标：用户给出任意本地音频（可选附歌词文本或 LRC），系统产出经人确认的分析数据，包括节拍/小节/段落、包络与鼓点、可选分轨、词级歌词。在此基础上规划镜头、由 agent 写场景、导出成片。ToB 无歌词配乐与音乐人有歌词 PV 走同一条路径。
+
+**现状（2026-10-01 核对代码）：只支持 pdoom 这一首歌。** 单一歌曲的绑定点如下，每一处都要拆：
+
+| 绑定点 | 位置 | 处理工作包 |
+|---|---|---|
+| 音频字节指纹不匹配即 422 拒绝 | `project-store.mjs` `createProjectFromAudio` | SONG-05 |
+| 分析数据固定读 `src/shot/full-song.json` | 同上 | SONG-00 |
+| 22 个镜头切点按 pdoom 歌词原文硬编码 | `reference-plan.mjs` | SONG-04 |
+| 引擎时间线 `timeline.ts` 按 pdoom 歌词硬编码；覆盖逻辑依赖 `original.find(id)` | 参考引擎 + `reference-server.mjs` transform | SONG-03 |
+| 40 个参考场景中 15 个调用 `ly.get('某句原词')`，换歌会直接抛错 | `engine/app/src/scenes/*.ts` | SONG-03 |
+| 音频固定为 `audio/pdoom.mp3` | 参考 `main.ts`、`render-worker.mjs` ffmpeg 混音 | SONG-03 |
+| 字体仅拉丁字形（Archivo/Cormorant/Plex Mono），中文歌词无字形 | `app/public/fonts` | SONG-03 |
+| 参考分析管线依赖 mlx-whisper（仅 macOS）、手调 `SECTION_BARS`/`ANCHORS`、固定 mp3 编码延迟 | `pdoom-video/analysis/*.py` | SONG-01（不复用其手调部分） |
+
+**原则：**
+
+- 分析结果是**带来源与置信度的草稿**，人确认后才能用于规划。ASR 识别出的歌词文本必须经人确认，AI 不能代替人确认。
+- 无歌词就是器乐工程，不伪造歌词。
+- 参考 pdoom 工程继续走指纹导入，作为分析质量的基准真值。
+- 模型、权重和 Python 环境要先列出体积与许可，经用户同意后才下载。
+
+**本机环境（2026-10-01 实测）：**
+
+- Windows，RTX 5070 Laptop 8GB；空闲显存 7.26GB。
+- 已有 conda 环境 `pytorch`（`D:\Users\Martis\anaconda3\envs\pytorch`，9.2GB）：
+  - Python 3.9.23、torch 2.8.0+cu128；架构列表含 sm_120，GPU 矩阵运算已实测通过。
+  - 已装：torchaudio 2.8.0、transformers 4.57.6、accelerate 1.10.1、onnxruntime-gpu 1.19.2、numpy 2.0.2、scipy 1.13.1。
+  - 未装：librosa、demucs、ASR 相关包。
+- base 环境是 Python 3.13，torch 为 CPU 版，不使用。
+- ffmpeg 9 可用；没有 uv。
+- 磁盘：D 盘剩余 29GB、F 盘剩余 71GB。模型缓存统一放 F 盘（`HF_HOME`、`TORCH_HOME` 指向 `F:/aicg/.models`，不进仓库）。
+
+**执行顺序：** `SONG-00 →（SONG-01 ∥ SONG-02 ∥ SONG-03）→ SONG-04 → SONG-05 → SONG-06`。SONG-00/01 只涉及新目录，可以和反馈冲刺并行；SONG-03/05 会碰热点文件，排在 FB-01 合并之后。
+
+#### SONG-00 分析数据契约与参考适配器（独占 `src/song/contract.mjs`、`src/song/adapters/`、`scripts/tests/song/`）
+
+1. 定义 `videograph-analysis/v2`（JSON Schema 并带校验器），分层存储，每层带 `provenance: { tool, version, model?, params, startedAt, confidence }`：
+   - `audio`：hash、时长、采样率、声道、解码器偏移（mp3 编码延迟按解码结果实测，不写死）。
+   - `rhythm`：bpm 或 tempo map、beats、downbeats、拍号、置信度。
+   - `sections`：起止、标签（intro/verse/chorus/bridge/outro/unknown）、置信度。
+   - `envelopes`：rms/low/mid/high，有分轨时加 vocal/drums/bass/other，并记录帧率。
+   - `onsets`：kick/snare/hat/vocal 及强度。
+   - `stems?`：分轨文件 hash（不内嵌字节）。
+   - `lyrics?`：语言、文本来源（user/lrc/asr）、文本是否经人确认；行/词/可选音节，每个元素带 conf。
+   - `overrides`：人工修正层，记录作者与时间，不覆盖原始分析。
+2. 适配器：
+   - `fromPdoom()`：把现有 `pdoom-video/data/*.json` 转成 v2，provenance 标为 reference-import。
+   - `toEngine()`：生成引擎读取的 `data/audio.json` 和 `data/lyrics.json`。
+   - `toFullSong()`：兼容旧工坊格式。
+3. 测试：pdoom 数据往返转换后，与原文件在数值上一致（误差 ≤1e-6）；缺少 lyrics 的器乐数据校验通过；词时间越界或倒序会被拒绝。
+
+#### SONG-01 本地分析器（独占新目录 `analyzer/`（Python 子工程）与 `src/song/analyzer-runner.mjs`）
+
+1. **Python 环境：复用本机 `pytorch` 环境的 CUDA 版 torch，但不改动原环境。**
+   - **方案 A（默认）**：`conda create -n videograph-analyzer --clone pytorch`，在克隆出的环境里装分析依赖，不用重新下载约 3GB 的 torch cu128。要注意的是：
+     - Python 3.9 已停止维护，依赖版本必须选仍支持 3.9 的：`librosa 0.10.2.post1`（1.0 要求 3.12+）、`demucs 4.0.1`（4.1 要求 3.10+）、`beat-this 1.1.0`、`faster-whisper 1.2.1`、`qwen-asr 0.0.6`。
+     - qwen-asr 固定 `transformers==4.57.6`，与现有环境一致；它要求 `accelerate==1.12.0`，在克隆环境里升级即可。
+     - 克隆约占 D 盘 9GB；空间不够时改用方案 B。
+   - **方案 B（A 出现依赖冲突时改用）**：新建 Python 3.12 conda 环境，从 PyTorch 官方 cu128 源安装 torch 2.8 系列（约 3GB 下载）。版本锁定与 A 相同，可以改用 librosa 1.0 和 demucs 4.1。
+   - 两种方案都写在 `analyzer/environment.md` 与 `analyzer/requirements-*.txt` 里，用精确版本号锁定。runner 通过 `VIDEOGRAPH_ANALYZER_PYTHON` 指定解释器的绝对路径，不从 PATH 里猜。
+   - `analyzer/doctor.py` 自检：Python 和 torch 版本、`cuda.is_available()`、sm_120、空闲显存、ffmpeg、各模型是否已缓存，输出 JSON。
+   - 安装脚本先打印需要下载的组件与体积，用户同意后再执行。
+2. 只开放固定的任务表（沿用 `pdoom/tasks.ts` 的思路），每个阶段是一个可缓存任务。缓存键为 `audioHash + stage + 工具/模型版本 + 参数`，产物先写临时文件再原子发布。
+   - **T0 解码**：ffmpeg 解码为 44.1k PCM，同时记录偏移。
+   - **T1 节奏与结构（beat_this 用 GPU 更快，CPU 也能跑）**：
+     - 包络与 onset 用 librosa。
+     - 鼓点不靠分轨：用 librosa HPSS 分出打击成分，再按低/中高频段区分 kick/snare/hat。
+     - beats/downbeats 用 `beat_this`（模型很小，可走 CPU）；librosa `beat_track` 作为兜底（它不出 downbeat，按拍号与重音推算并标为低置信）。
+     - 段落用自相似矩阵与新颖度曲线切分，并吸附到小节线。
+     - 只有这一级时也能完成器乐工程。
+   - **T2 分轨（可选；默认关闭，见下方许可表）**：只用于提升人声包络和对齐质量。ASR 与对齐的默认路径直接处理混音，不依赖分轨。
+   - **T3 歌词**：
+     - **用户提供文本或 LRC 时**：按行切段（每段不超过 5 分钟），用 `Qwen3-ForcedAligner-0.6B` 做强制对齐；中文出字级时间，英文出词级时间。
+     - **没有文本时**：用 `Qwen3-ASR-1.7B` 识别（官方支持演唱和带伴奏的歌曲；显存不够时退到 0.6B），得到草稿；人确认文本后再做对齐。
+     - 对齐完成后用信号细化词首尾，再计算置信度。
+     - 置信度低时，用备选对齐器复跑并取两者的一致性。
+3. **模型选型与商用许可**：建 `analyzer/MODELS.md`，写明每个模型的用途、体积、许可和商用是否可行。默认链路只放许可清楚、可以商用的模型；NC 或许可不明的只能显式开启，并在工程 provenance 和导出清单中记录。
+   - 2026-10-01 初步核查如下。“待核实”的条目，SONG-01 实施时要读权重仓库里的 LICENSE 原文并存档链接；在那之前不算“可商用”。
+     | 用途 | 默认（可商用） | 备选 | 排除出默认（原因） |
+     |---|---|---|---|
+     | 节拍/下拍 | `beat_this` 1.1.0：代码与权重均为 MIT（README 声明）。部分训练数据有版权限制，作者提示使用者自行判断 | librosa 0.10/1.0 `beat_track`（ISC，纯算法、无权重） | madmom 预训练模型（CC BY-NC-SA 4.0，明确禁止商用）；all-in-one（权重许可未写明，训练数据为 Harmonix；Windows 上需从源码编译 NATTEN） |
+     | 段落 | 自研：librosa 自相似矩阵、新颖度曲线，吸附到小节线（ISC） | 人工在 SONG-02 校正 | all-in-one（同上） |
+     | 鼓点 | librosa HPSS 加频段 onset（ISC） | 开启分轨后改用 drums 分轨 | — |
+     | 人声分离（可选） | 默认不分轨 | Spleeter 2.4.2：代码 MIT，权重未单独声明，但已被 iZotope RX 等商业软件使用，按相对低风险处理。它需要 TensorFlow、Python 3.8–3.11，要放在单独的环境里 | Demucs htdemucs：代码 MIT，权重训练用了 MUSDB18（仅限学术用途），issue #327 至今没有官方答复，属于灰色地带。只能由用户显式开启，并记录在导出清单里 |
+     | 歌词识别 | `Qwen3-ASR-1.7B` / `0.6B`：仓库为 Apache-2.0，权重卡许可**待核实**；支持 52 种语言/方言，其中有中文和英文 | `faster-whisper` 1.2.1（MIT）加 Whisper large-v3 权重（OpenAI 以 MIT 发布，待核实） | — |
+     | 强制对齐 | `Qwen3-ForcedAligner-0.6B`：模型卡标注 Apache-2.0（待核实 LICENSE 原文）；支持 11 种语言，含中、英、粤、日、韩；单次不超过 5 分钟；模型卡写的是“语音”，**对演唱的效果没有官方数据，要用 pdoom 基准实测** | Montreal Forced Aligner 的 english_mfa / mandarin_mfa（CC BY 4.0，需要署名；Windows 上走 conda-forge 安装）；stable-ts（MIT）细化 Whisper 词时间，作为最后兜底 | MMS_FA（CC-BY-NC，pdoom 原管线在用）；whisperX 默认的 wav2vec2 对齐模型（不同语言的模型许可不一，部分为 NC） |
+   - 版权提醒：模型许可不覆盖用户输入的歌曲。界面要提示用户只处理自己有权使用的音频。
+   - 实施时按顺序验证：先 T1（只需 pip 依赖和 beat_this 的小权重），再 Qwen3-ForcedAligner（约 1.2GB）、Qwen3-ASR-1.7B（约 3.5GB，fp16 推理约 4–5GB 显存，8GB 卡可行但要实测），最后才是备选。每次下载前列出体积，等用户同意。
+4. 失败分级：缺依赖、显存不足、模型下载失败与分析质量低要分开报告。显存不足时自动降级（分块处理或改用 CPU），并在 provenance 里记录。
+5. 测试：
+   - 合成 click track（已知 BPM 和拍号，由 ffmpeg/numpy 生成）验证 T1：拍点 F-measure ≥0.98，bpm 误差 ≤0.5。
+   - 用 pdoom 原 BGM 和参考数据对比，记录 beat F-measure 以及词首时间中位误差和 P90 误差，作为基准写入本节。目标是中位误差 ≤50ms；达不到时如实记录。
+   - 对齐器对比：在 pdoom 基准上分别测 Qwen3-ForcedAligner 直接处理混音、Qwen3-ForcedAligner 处理 Spleeter 人声、MFA 三种方案。只有某种组合达标，才把它定为默认。
+   - 中文：用一首用户提供的中文歌（不入库），人工标注 20 个字的起点作为抽样基准，测字级误差。
+
+#### SONG-02 分析节点与人工校正界面（独占 `src/song/ui/`；节点接入 `ProjectStudio.tsx` 由集成者合并）
+
+1. 节点画布新增“音频 → 分析 → 歌词 → 节奏/段落”节点。每个节点显示来源、置信度、状态：草稿、待人确认、已确认、已修正。
+2. 校正视图（Canvas 自绘，不新增重型依赖）包括：
+   - 波形与频谱、拍网格；
+   - 全局偏移与 BPM 微调、tap tempo；
+   - 段落边界拖动与重命名；
+   - 歌词粘贴/LRC 导入，逐词拖动起止时间，低置信词高亮；
+   - 点击任意词即从该处播放。
+3. 所有修改写入 `overrides`，可撤销，并显示与原始分析的差异。歌词文本“已确认”只能由人点击，按钮旁说明确认后可以开始规划镜头。
+4. 分析修改后的影响：时间窗受影响的镜头标为“待更新”，导出被拦截；不影响的镜头保持原状。
+5. 无障碍：词时间编辑可以用键盘完成（选中词后用方向键按 10ms/1 帧微调）。
+
+#### SONG-03 引擎解耦（`reference-server.mjs`、`render-worker.mjs` 属于集成者；场景模板和字体放 `engine-base/`）
+
+1. 音频路径参数化：工程记录 `audio.file`（`engine/audio/<hash>.<ext>`），预览播放器和 ffmpeg 混音都读这个字段，不再写死 `pdoom.mp3`。
+2. 时间线完全由工程镜头列表生成：不依赖参考 `timeline.ts` 里的条目，每个镜头直接映射到 `module/params/post`。参考工程的行为保持不变，现有导出缓存键要么不变，要么显式升版本。
+3. 场景分级：
+   - 给 40 个参考场景标注“通用”或“绑定 pdoom 歌词”，记录在 `engine-base/SCENES.md`。
+   - 新歌工程只复制引擎核心和通用场景。
+   - 新增 `engine-base/scenes/_window-template.ts`：只用 `lyrics.linesIn(start, end)` 和拍点事件，给 agent 当起点。
+   - 静态检查：场景里 `ly.get('字面量')` 的文本必须存在于本工程歌词中，否则提交时拒绝，避免运行时才抛错。
+4. 字体：新增字体资源登记（文件 hash、许可、来源）。中文默认用 Noto Sans SC / Source Han（OFL），按工程歌词用 fonttools 子集化，只放进工程目录，不提交仓库。opentype 轮廓文字效果对中文要实测性能。
+5. 引擎来源说明：新歌工程的 CREDITS 写明“引擎核心来自 pdoom-video（MIT），场景为本工程新写”，不再复制 pdoom 的 README 当作品署名。
+
+#### SONG-04 新歌镜头规划（独占 `src/song/planner.mjs`、`scripts/tests/song/planner*`）
+
+1. 候选切点生成：把 pdoom `cutAtLine` 的规则通用化：在歌词行首词之前取最近的拍；器乐段改用小节线或段落边界；镜头时长有上下限（默认 2–12s，可配置）。所有切点量化到输出帧。
+2. 规划由 agent 结构化提交，服务端校验：
+   - 覆盖 `0..duration`，无空隙、无重叠、单调递增；
+   - 每个镜头的锚点（歌词行或段落）必须存在；
+   - 切点不能落在一个词的中间。
+3. 产出的镜头状态为 `needs-generation`，来源 `ai-original`，带 `lyricPlan` 草稿。之后沿用现有“读上下文 → submit → validate”流程。转场节点按相邻镜头自动生成。
+4. 内置的确定性规划只用于测试和兜底（每段一个镜头），并明确标注不是 AI 创作。
+
+#### SONG-05 建工程与 MCP 接入（服务路由和 MCP 注册由集成者合并；同步更新 `docs/MCP-GUIDE.md`）
+
+1. `createProjectFromAudio` 改为：
+   - 指纹命中参考曲 → 现有导入流程（保留）。
+   - 否则 → 新建空工程：复制音频，状态为 `analysis-pending`，排队执行 T0–T3（按用户选择的级别）。
+2. 工程状态机：`analysis-pending → analysis-draft → analysis-confirmed → planned → 正常镜头流程`。规划前必须是 `analysis-confirmed`；分析被修改后，进入受控回退流程。
+3. MCP 工具：
+   - `project_create_from_audio`：参数 `audioPath, name?, lyricsText?, lrcPath?, language?, tier?`，`project_create_from_bgm` 保留为别名。
+   - `song_analysis_get`：可分层读取、可按时间段读取。
+   - `song_analysis_run`：只接受固定的 stage 名。
+   - `song_lyrics_submit`：agent 可以提交歌词文本草稿，状态仍是“待人确认”。
+   - `song_analysis_patch`：agent 的修正标为 mcp 来源。
+   - `project_plan_submit`。
+   - **不提供** AI 确认分析的工具。
+4. 用户素材只留在本机，MCP 输出不包含音频字节和本机绝对路径。
+
+#### SONG-06 验收（QA owner；只测，不改实现）
+
+1. 合成 click track：从建工程到 T1 分析、人确认、规划（确定性兜底）、3 个镜头，再到导出全流程跑通。用 ffprobe 核对帧数与时长，导出音轨与源音频的相关系数 ≥0.999。
+2. 回归：pdoom 原 BGM 仍走指纹导入，现有参考工程和导出缓存不受影响。
+3. 基准：pdoom BGM 强制走新分析器，对比参考数据，结果写入本节。
+4. 用户提供的真实歌曲（至少一首中文、一首无歌词配乐；文件不入库）：
+   - 分析 → 人工校正 → 规划 → agent 创作 → 导出；
+   - 记录人工校正花了多久、改了多少处；
+   - 审美由人确认。
+5. 未知音频且没有提供歌词时，不出现任何旧工程的歌词；歌词校验门拒绝引用不存在的句子。
 
 ### 既有任务清单
 
@@ -231,12 +444,11 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 
 给定 `pdoom-video` 原始 BGM，以字节指纹命中已提交的分析数据，导入真实引擎/源码/素材，再通过 MCP 做局部创作与修改。明确标记这是**参考工程导入 + 新版本创作**，不是从音频凭空推断出原始作品。
 
-### 通用音频输入（未完成）
+### 通用音频输入（未完成 → 已拆为第三节“并行冲刺 SONG”）
 
-- 本地音频元数据、响度/包络、节拍/段落分析；输出来源与置信度。
-- 可选人声分离、歌词识别和强制对齐；模型/权重下载、GPU/磁盘成本须明确，不未经许可拉取数 GB 依赖。
+- 实施计划、单曲绑定点清单与验收见 SONG-00～06。
 - 不匹配原曲的输入不得复用旧歌词时间轴；无歌词时生成器乐型方案，不伪造歌词。
-- 音乐数据参数化，ToB 脚本/旁白使用同一时间模型。
+- 音乐数据参数化，ToB 脚本/旁白后续使用同一时间模型（旁白对齐可复用 SONG-01 的强制对齐阶段）。
 
 ### AI 一键创作（未完成）
 
@@ -287,7 +499,9 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | ASSET-01 品牌与产品素材 | ✅ ZCode 会话（2026-10-01）：已写代码+已运行验证，**未接入主界面**，等集成者挂载 | 新目录 `src/brand/`、`src/server/brand/`、`scripts/tests/brand/`、`public/brand-demo/`；未改工作区现有未提交文件 | 独立实现品牌资料/素材元数据与管理面板；先使用测试数据和适配接口，不直接改主界面或工程数据库。交付记录见下方"ASSET-01 交付状态" |
 | QA-01 人与 AI 操作检查 | ✅ ZCode 会话认领（2026-09-30，用户指派），第一切片已交付 | 新目录 `scripts/tests/collaboration/`、独立测试夹具 | 反馈生命周期多步序列：拒绝→重新响应→接受、重复拒绝恢复一致、human/mcp 来源组合；服务级与权限测试留待后续切片；不能改产品实现来让测试变绿 |
 | FEEDBACK-02 人工反馈闭环收尾 | ✅ ZCode 会话认领（2026-09-30，用户指派），后端完成 | `src/server/project-store.mjs` 反馈/接受/拒绝语义、`scripts/project-store-test.mjs` | 拒绝候选按快照键完整恢复、不残留候选字段（shots 与 transitions 共用）；提交只标记明确响应的意见。`ProjectStudio.tsx` 源码弹窗勾选 UI 在集成者手中，交接要点：按 shot.feedback 渲染 pending 意见复选框，仅提交勾选项，勿自动全选 |
-| INT-00 / FB-01 / FB-02 / FB-03 / SKILL-01 / FB-04 | ⬜ 待认领（2026-10-01 规划），详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
+| SKILL-01 shotcraft 纳入仓库 | ✅ ZCode 会话认领（2026-10-01）：已写代码+已运行验证，分支 feat/skill-shotcraft | skills/shotcraft/、scripts/skills/、scripts/tests/docs/（已交付）；MCP resources/craft_guide/respond_to_feedback 注册提给集成者 | 内容为原创蒸馏，许可归档见 skills/shotcraft/SOURCES.md（8 无许可仓库仅思路级、StuGRua 按受限处理）；分发用 scripts/skills/install.mjs；工具速查表由 sync-platform.mjs 从 MCP-GUIDE 生成，mcp-guide-sync 测试兜底（1 项占位等集成者注册后启用） |
+| INT-00 / FB-01 / FB-02 / FB-03 / FB-04 | ⬜ 待认领（2026-10-01 规划），详见第三节“当前冲刺”（SKILL-01 已由 ZCode 会话认领） | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
+| SONG-00 ～ SONG-06 任意歌曲拆解 | ⬜ 待认领（2026-10-01 规划），详见第三节“并行冲刺 SONG” | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/` | SONG-00/01 可与反馈冲刺并行；下载模型/建 Python 环境前须用户确认 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 
 认领方式：先在本节登记工作包、分支、范围与状态，再开始编辑。没有登记的同事不被视为已经接单；需要跨范围修改时，先把建议交给对应 owner/集成者，不能两边同时覆盖同一文件。

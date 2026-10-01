@@ -7,4 +7,5 @@
 - 不提交 `.cache/`、`.queue/`、`projects/`、服务令牌、API key、用户音频、视频产物或 `node_modules/`。忽略规则不是工程备份。
 - 并行开发使用独立工作副本、功能分支和运行目录；不得共写同一工程数据库或服务令牌。
 - 结果必须区分“已写代码”“已运行验证”“人工已接受”。测试失败或未运行要明确记录；不以模板/复现冒充独立原创。
+- MCP 操作说明在 `docs/MCP-GUIDE.md`。改动任何 MCP 工具的名称、参数或语义，必须在同一提交中更新该指南（含 toolset 行）；shotcraft skill 改动后 bump version。详见 ROADMAP“文档同步规则”。
 - 当前安全的轻量检查是 `node --test scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs` 和 `npm run build`。浏览器/GPU/全量回归的环境要求见 README 与 ROADMAP。

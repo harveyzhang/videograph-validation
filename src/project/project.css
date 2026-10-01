@@ -75,4 +75,21 @@
 .project-review-confirm { display: flex; align-items: flex-start; gap: 7px; margin: 10px 0; font-size: 11px; line-height: 1.6; }
 .project-source-feedback { display: grid; gap: 7px; margin: 0 14px 10px; padding: 10px; max-height: 160px; overflow: auto; border: 1px solid var(--line-2); border-radius: 6px; font-size: 11px; }
 .project-source-feedback label { display: flex; gap: 7px; align-items: flex-start; line-height: 1.6; }
-@media (forced-colors: active) { .project-shot-node.is-selected { outline: 2px solid Highlight; } }
+.project-transition-node { width: 240px; }
+.project-transition-node .node-header { background: var(--panel-2); font-size: 11px; }
+.project-transition-node .node-body { font-size: 10px; gap: 6px; }
+.project-transition-node p { margin: 0; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.project-transition-node small, .project-transition-node span { color: var(--muted); }
+.project-transition-nav { margin-top: 18px; font-size: 11px; }
+.project-transition-nav summary, .project-lyric-inspector summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.project-transition-inspector { display: grid; gap: 12px; }
+.project-transition-inspector input[type=number], .project-element-editor input { width: 100%; padding: 7px; border: 1px solid var(--line-2); border-radius: 5px; color: var(--text); background: var(--widget); font-size: 12px; }
+.project-transition-feedback { display: grid; gap: 7px; font-size: 11px; }
+.project-transition-feedback label { display: flex; gap: 6px; align-items: flex-start; }
+.project-transition-feedback small { display: block; color: var(--muted); }
+.project-lyric-inspector { font-size: 11px; border-top: 1px solid var(--line-2); padding-top: 8px; }
+.project-lyric-evidence p { display: grid; gap: 4px; padding: 8px; margin: 4px 0; background: var(--widget); border-radius: 5px; line-height: 1.5; }
+.project-lyric-evidence small { color: var(--muted); font: 10px var(--mono); }
+.project-element-editor { display: grid; gap: 7px; margin: 10px 0; padding: 9px; border: 1px solid var(--line-2); border-radius: 6px; }
+.project-lyric-inspector > .field, .project-lyric-inspector > .project-inspector-actions { margin: 10px 0; }
+@media (forced-colors: active) { .project-shot-node.is-selected, .project-transition-node.is-selected { outline: 2px solid Highlight; } }

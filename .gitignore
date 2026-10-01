@@ -38,3 +38,5 @@ projects/
 Thumbs.db
 .vscode/
 .idea/
+.claude/skills/
+.claude/worktrees/

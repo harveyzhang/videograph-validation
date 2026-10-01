@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, Handle, MiniMap, Panel, Position, ReactFlow, useNodesState, type Edge, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react';
 import { AudioLines, Clapperboard, FileCode2, FolderOpen, Upload, Play, Download, Lock, Unlock, Layers3, X, RefreshCw } from 'lucide-react';
-import { importBgm, projectApi, projectFile, type VideoProject, type ProjectShot, type ProjectTransition, type ProjectJob, type ProjectSummary } from './api';
+import { importBgm, projectApi, projectFile, serviceUrl, type VideoProject, type ProjectShot, type ProjectTransition, type ProjectJob, type ProjectSummary } from './api';
 import { LyricInspector } from './LyricInspector';
 import { TransitionInspector, transitionLabels } from './TransitionInspector';
 import './project.css';
@@ -220,21 +220,26 @@ export default function ProjectStudio() {
             {preview && <Panel position="bottom-center" className="project-preview"><div><strong>{selected?.title ?? (selectedTransition ? `${selectedTransition.fromShotId} → ${selectedTransition.toShotId}` : '')} · {previewKind} · 真实引擎</strong><button aria-label="关闭引擎预览" onClick={() => setPreview(null)}><X size={15} /></button></div><iframe title="真实镜头播放器" src={preview} allow="autoplay" /></Panel>}
           </ReactFlow>}
       </main>
-      <aside className="sidebar project-inspector">{selected && project ? <>
+      <aside className="sidebar project-inspector">{selectedTransition && project ? <TransitionInspector key={`${project.id}:${selectedTransition.id}`} project={project} transition={selectedTransition} busy={busy} onProject={setProject} onAction={act} onJob={(job) => setJobs((previous) => [job, ...previous.filter((entry) => entry.id !== job.id)])} onPreview={(url, label) => {
+        if (selectionRef.current !== selectionKey) return false;
+        setPreview(url); setPreviewKind(label); return true;
+      }} /> : selected && project ? <>
         <div className="sidebar-title">{selected.title}<span>输入 v{selected.inputRevision}</span></div>
         <p className="project-note">{selected.start.toFixed(3)}–{selected.end.toFixed(3)}s · {statusLabel[selected.status] ?? selected.status}</p>
         <div className="project-inspector-actions"><button className="mini-button" disabled={busy || selected.status === 'needs-generation'} onClick={() => void act(async () => {
-          const data = await projectApi<{ url: string }>(`/projects/${project.id}/preview`, {});
+          const data = await projectApi<{ url: string; range?: { start: number; end: number } }>(`/projects/${project.id}/preview`, { shotId: selected.id });
           if (selectionRef.current !== selectionKey) return;
-          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${selected.start}`); setPreviewKind('当前候选');
+          const start = data.range?.start ?? selected.start, end = data.range?.end ?? selected.end;
+          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${start}&rangeStart=${start}&rangeEnd=${end}`); setPreviewKind('当前候选');
         })}><Play size={13} />预览此镜头</button>
           <button className="mini-button" disabled={busy || selected.status === 'needs-generation'} onClick={() => void act(async () => { const job = await projectApi<ProjectJob>(`/projects/${project.id}/validate`, { shotId: selected.id }); setJobs((previous) => [job, ...previous]); })}>5 帧校验</button>
           <button className="mini-button" disabled={busy} onClick={() => void update({ locked: !selected.locked })}>{selected.locked ? <Unlock size={13} /> : <Lock size={13} />}{selected.locked ? '解锁' : '锁定'}</button>
         </div>
         {selected.reviewBaseline && <button className="mini-button" disabled={busy} onClick={() => void act(async () => {
-          const data = await projectApi<{ url: string }>(`/projects/${project.id}/preview`, { shotId: selected.id, version: 'before-feedback' });
+          const data = await projectApi<{ url: string; range?: { start: number; end: number } }>(`/projects/${project.id}/preview`, { shotId: selected.id, version: 'before-feedback' });
           if (selectionRef.current !== selectionKey) return;
-          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${selected.start}`); setPreviewKind('修改前版本');
+          const start = data.range?.start ?? selected.start, end = data.range?.end ?? selected.end;
+          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${start}&rangeStart=${start}&rangeEnd=${end}`); setPreviewKind('修改前版本');
         })}>预览修改前版本</button>}
         {awaitingReview.length > 0 && <div className="project-review-box"><strong>AI 已响应 {awaitingReview.length} 条意见，等待你确认</strong>
           <p>技术验证不代表符合你的创作要求。对比修改前和当前候选后，再选择采用。</p>
@@ -257,14 +262,15 @@ export default function ProjectStudio() {
           const data = await projectApi<{ shot: ProjectShot; code: string }>(`/projects/${project.id}/shots/${selected.id}/source`);
           setSource({ projectId: project.id, shotId: selected.id, revision: data.shot.inputRevision, code: data.code, feedback: (data.shot.feedback ?? []).filter((note) => note.status !== 'accepted'), feedbackIds: [] });
         })}><FileCode2 size={14} />查看 / 修改真实源码</button>
+        <LyricInspector key={`${project.id}:${selected.id}`} projectId={project.id} shot={selected} busy={busy} onProject={setProject} onAction={act} />
         <p className="project-note">来源：{sourceLabel(selected.source)}。{selected.validation ? ` 已通过 ${selected.validation.samples} 帧抽检；不代表逐帧/审美验收。` : ''}</p>
       </> : <div className="project-note">选中镜头以编辑提示词、参数和源码。</div>}
-        <div className="project-jobs"><div className="sidebar-title">后台任务</div>{jobs.slice(0, 5).map((job) => <article key={job.id}><strong>{job.kind === 'export' ? '完整 PV' : `镜头 ${job.shotId}`} · {jobLabel[job.status] ?? job.status}</strong><p>{job.detail} {Math.round(job.progress * 100)}%</p>{job.error && <pre>{job.error}</pre>}{['running', 'queued'].includes(job.status) && <button className="mini-button" onClick={() => void act(async () => { await projectApi(`/projects/${project!.id}/jobs/${job.id}/cancel`, {}); })}>取消任务</button>}
+        <div className="project-jobs"><div className="sidebar-title">后台任务</div>{jobs.slice(0, 5).map((job) => <article key={job.id}><strong>{job.kind === 'export' ? '完整 PV' : job.kind === 'validate-transition' ? `转场 ${job.transitionId}` : `镜头 ${job.shotId}`} · {jobLabel[job.status] ?? job.status}</strong><p>{job.detail} {Math.round(job.progress * 100)}%</p>{job.error && <pre>{job.error}</pre>}{['running', 'queued'].includes(job.status) && <button className="mini-button" onClick={() => void act(async () => { await projectApi(`/projects/${project!.id}/jobs/${job.id}/cancel`, {}); })}>取消任务</button>}
           {job.result?.file && <a href={projectFile(project!.id, job.result.file)} target="_blank" rel="noreferrer">打开成片 · 工程 rev_{job.inputRevision}</a>}</article>)}</div>
         {completedVideo && <p className="project-note">最新成片：{completedVideo.result?.frames} 帧 / {completedVideo.result?.seconds?.toFixed(2)}s。后续编辑不改变已经导出的版本。</p>}
       </aside>
     </div>
-    <footer className="statusbar"><span>本地工程 · SQLite + 引擎快照</span><span>{project ? `工程 rev_${project.revision} · ${project.song.duration.toFixed(2)}s · ${project.output.fps}fps` : '服务：127.0.0.1:5191'}</span><span>{activeJobs.length ? '后台任务运行中，页面可关闭' : '就绪'}</span></footer>
+    <footer className="statusbar"><span>本地工程 · SQLite + 引擎快照</span><span>{project ? `工程 rev_${project.revision} · ${project.song.duration.toFixed(2)}s · ${project.output.fps}fps` : `服务：${serviceUrl}`}</span><span>{activeJobs.length ? '后台任务运行中，页面可关闭' : '就绪'}</span></footer>
     {source && <div className="modal-overlay"><div className="project-source-modal"><header><strong>{source.shotId} · 源码 / 输入 v{source.revision}</strong><button aria-label="关闭源码" onClick={() => setSource(null)}><X size={18} /></button></header>{error && <p className="shot-error" role="alert">{error}</p>}{source.feedback.length > 0 && <div className="project-source-feedback"><strong>这次改动明确响应了哪些意见？</strong>{source.feedback.map((note) => <label key={note.id}><input type="checkbox" checked={source.feedbackIds.includes(note.id)} onChange={(event) => setSource({ ...source, feedbackIds: event.target.checked ? [...source.feedbackIds, note.id] : source.feedbackIds.filter((id) => id !== note.id) })} />{note.text}</label>)}</div>}<textarea spellCheck={false} value={source.code} onChange={(event) => setSource({ ...source, code: event.target.value })} /><footer><span>保存为新版本，不覆盖原始文件。需要通过校验后才能作为有效产物。</span><button className="run-button" disabled={busy} onClick={() => void act(async () => {
       const next = await projectApi<VideoProject>(`/projects/${source.projectId}/shots/${source.shotId}/source`, { expectedInputRevision: source.revision, code: source.code, summary: '人工源码编辑', addressedFeedbackIds: source.feedbackIds, author: 'human' });
       setProject(next); setSource(null); if (selected) resetForm(next.shots.find((shot) => shot.id === selected.id)!);

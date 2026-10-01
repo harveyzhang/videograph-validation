@@ -54,8 +54,9 @@ export function transitionWindow(project, transition, fps = project.output?.fps 
     holdTime: Math.max(left.start, startFrame / fps - 1 / fps) };
 }
 export function renderShotsWithTransitions(shots, transitions = [], fps = 30) {
-  const project = { shots, output: { fps } };
-  const rendered = shots.map((shot) => ({ ...shot, logicalStart: shot.start, logicalEnd: shot.end }));
+  const aligned = shots.map((shot) => ({ ...shot, start: Math.round(shot.start * fps) / fps, end: Math.round(shot.end * fps) / fps }));
+  const project = { shots: aligned, output: { fps } };
+  const rendered = aligned.map((shot) => ({ ...shot, logicalStart: shot.start, logicalEnd: shot.end }));
   for (const transition of transitions) {
     if (transition.mode === 'cut') continue;
     validateTransitionConfig(project, transition, transitionConfig(transition));

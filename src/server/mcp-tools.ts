@@ -51,7 +51,7 @@ export async function callProjectTool(name: string, args: Record<string, unknown
   else if (name === 'project_render') { path += '/render'; body = { fps: args.fps, samples: args.samples }; }
   else if (name === 'project_job_get') path += `/jobs${args.jobId ? '/' + encodeURIComponent(String(args.jobId)) : ''}`;
   else if (name === 'project_job_cancel') { path += `/jobs/${encodeURIComponent(String(args.jobId))}/cancel`; body = {}; }
-  const token = readFileSync(fileURLToPath(new URL('../../.cache/service-token', import.meta.url)), 'utf8');
+  const token = readFileSync(process.env.VIDEOGRAPH_SERVICE_TOKEN_FILE ?? fileURLToPath(new URL('../../.cache/service-token', import.meta.url)), 'utf8');
   const response = await fetch(base.replace(/\/$/, '') + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(120000) });
   const result = await response.json() as Record<string, unknown>;
   if (!response.ok) throw new Error(String(result.error ?? `HTTP ${response.status}`));

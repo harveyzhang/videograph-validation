@@ -52,7 +52,7 @@ export interface ProjectJob {
 }
 export interface ProjectSummary { id: string; name: string; shots: number; duration: number; revision: number }
 
-export const serviceUrl = 'http://127.0.0.1:5191';
+export const serviceUrl = (import.meta.env.VITE_VIDEOGRAPH_SERVICE_URL || 'http://127.0.0.1:5191').replace(/\/$/, '');
 let token = '';
 async function authorize() {
   const response = await fetch(`${serviceUrl}/session`);
