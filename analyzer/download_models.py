@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 MODELS = [
     {"name": "beat_this", "repo": "cpjku/beast_this__beat_this_final0", "alternates": ["cpjku/beat_this_final0"], "type": "hf"},
@@ -25,11 +26,13 @@ def main():
     from huggingface_hub import snapshot_download
     for model in plan:
         repos = [model["repo"]] + model.get("alternates", [])
+        target = Path(os.environ.get("HF_HOME", "F:/aicg/.models")) / "local" / model["name"]
         last_error = None
         for repo in repos:
             try:
-                print(json.dumps({"download": model["name"], "repo": repo}, ensure_ascii=False), flush=True)
-                path = snapshot_download(repo)
+                print(json.dumps({"download": model["name"], "repo": repo, "target": str(target)}, ensure_ascii=False), flush=True)
+                # local_dir 实体拷贝：绕开 Windows 符号链接特权问题（WinError 1314）
+                path = snapshot_download(repo, local_dir=str(target))
                 print(json.dumps({"downloaded": model["name"], "path": path}, ensure_ascii=False), flush=True)
                 break
             except Exception as error:  # 仓库名以实测为准，失败逐个尝试备选

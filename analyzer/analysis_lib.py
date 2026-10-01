@@ -100,11 +100,14 @@ def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):
     try:
         beats, downbeats, method, confidence = _beats_via_beat_this(audio_path, device)
         if beats is not None and len(beats) > 4:
-            bpm = 60.0 / float(np.median(np.diff(beats)))
-            return list(map(float, beats)), list(map(float, downbeats)), float(bpm), method, confidence
-    except Exception:  # 模型缺失/显存不足都回退，provenance 记录真实方法
-        pass
+            # BPM 取拍位置线性拟合斜率：网格局部吸附有抖动，长程速率才是真实 BPM
+            fit_bpm = 60.0 / float(np.polyfit(np.arange(len(beats)), np.asarray(beats, dtype=float), 1)[0])
+            return list(map(float, beats)), list(map(float, downbeats)), fit_bpm, method, confidence
+    except Exception as beat_this_error:  # 模型缺失/显存不足都回退，provenance 记录真实方法
+        import sys as _sys
+        print(f'WARNING beat_this fallback: {beat_this_error}', file=_sys.stderr)
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="time", trim=False)
+    tempo_value = float(np.atleast_1d(tempo)[0])
     # 八度校正：对 t/2、t、2t 候选按「匹配到的 kick/snare 事件强度均值」评分——
     # 2× 网格在真实音乐里一半落在 hat/空档（强度≈0），均值减半即被淘汰；错拍半速时 2× 网格仍全踩强拍。
     onsets = percussion_onsets(y, sr)
@@ -123,7 +126,7 @@ def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):
         return total / max(1, len(grid))
 
     scored = []
-    for candidate in (tempo / 2, float(np.atleast_1d(tempo)[0]), tempo * 2):
+    for candidate in (tempo_value / 2, tempo_value, tempo_value * 2):
         if not (20 <= candidate <= 400):
             continue
         _, grid = librosa.beat.beat_track(y=y, sr=sr, bpm=float(candidate), units="time", trim=False)
@@ -131,7 +134,7 @@ def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):
             continue
         scored.append((float(candidate), grid_score(np.asarray(grid, dtype=float)), np.asarray(grid, dtype=float)))
     if not scored:
-        return [], [], float(np.atleast_1d(tempo)[0]), "librosa.beat_track", 0.3
+        return [], [], tempo_value, "librosa.beat_track", 0.3
     best_score = max(score for _, score, _ in scored)
     qualified = [entry for entry in scored if entry[1] >= max(0.7 * best_score, 0.4)]
     bpm_value, score, beats = max(qualified, key=lambda entry: entry[0])
