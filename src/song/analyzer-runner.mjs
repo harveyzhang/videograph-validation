@@ -67,7 +67,13 @@ export async function runAnalysis({ audioPath, stages = ['t0', 't1', 't3'], lyri
 
 function runPython(python, args, onProgress) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(python, args, { windowsHide: true });
+    // 模型权重以 local_dir 模式落盘（绕开 Windows 符号链接特权）；未显式配置时给默认路径。
+    const env = { ...process.env };
+    env.VIDEOGRAPH_QWEN_ALIGNER_DIR ??= 'F:/aicg/.models/local/qwen3-forced-aligner-0.6b';
+    env.VIDEOGRAPH_QWEN_ASR_DIR ??= 'F:/aicg/.models/local/qwen3-asr-1.7b';
+    env.HF_HOME ??= 'F:/aicg/.models';
+    env.TORCH_HOME ??= 'F:/aicg/.models'; // beat_this 权重走 torch.hub 缓存（TORCH_HOME/checkpoints）
+    const child = spawn(python, args, { windowsHide: true, env });
     const lines = [];
     let buffer = '';
     child.stdout.on('data', (chunk) => {

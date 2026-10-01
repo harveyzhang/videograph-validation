@@ -84,14 +84,18 @@ def _near(t, events, window):
 
 
 def percussion_onsets(y, sr=SR):
-    """kick/snare/hat 攻击点（[time, strength]）：HPSS 打击成分 + 频段 flux 峰。"""
+    """kick/snare/hat 攻击点（[time, strength]）：HPSS 打击成分 + 频段 flux 峰。
+    vocal onset 无分轨时用「全混音中低频 onset − 已归入鼓组的事件」近似（provenance 标 hpss+band-flux）。"""
     import librosa
     percussive, _ = librosa.effects.hpss(y)
     kick = _band_attacks(percussive, sr, 20, KICK_MAX)
     snare = _band_attacks(percussive, sr, SNARE_LO, SNARE_HI)
     hat = _band_attacks(percussive, sr, HAT_MIN, sr / 2)
     hat = [(t, s) for t, s in hat if not _near(t, snare, 0.04) and not _near(t, kick, 0.03)]
-    return {"kick": kick, "snare": snare, "hat": hat}
+    harmonic, _ = librosa.effects.hpss(y)
+    melodic = [(t, s) for t, s in _band_attacks(harmonic, sr, 150, HAT_MIN)
+               if not _near(t, kick, 0.03) and not _near(t, snare, 0.04) and not _near(t, hat, 0.03)]
+    return {"kick": kick, "snare": snare, "hat": hat, "vocal": melodic}
 
 
 def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):

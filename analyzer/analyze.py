@@ -128,39 +128,94 @@ def stage_t3(spec, out_dir):
     return result
 
 
+LANGUAGE_NAMES = {"zh": "Chinese", "en": "English", "yue": "Cantonese", "ja": "Japanese", "ko": "Korean"}
+
+
 def _load_qwen_aligner(spec):
+    """按实测 API：Qwen3ForcedAligner.from_pretrained(path) → align(audio, text, language)。"""
     try:
         from qwen_asr import Qwen3ForcedAligner  # type: ignore
     except ImportError as error:
         raise RuntimeError(f"qwen_asr 未安装或 API 变化（{error}）；请核对 qwen-asr 包文档后更新 analyzer/analyze.py 的 align_with_qwen") from error
-    return Qwen3ForcedAligner()
+    import torch
+    path = os.environ.get("VIDEOGRAPH_QWEN_ALIGNER_DIR") or "Qwen/Qwen3-ForcedAligner-0.6B"
+    kwargs = {"torch_dtype": torch.float16} if spec.get("gpu", True) and torch.cuda.is_available() else {}
+    kwargs["device_map"] = "cuda" if spec.get("gpu", True) and torch.cuda.is_available() else "cpu"
+    return Qwen3ForcedAligner.from_pretrained(path, **kwargs)
+
+
+def _result_items(result):
+    """ForcedAlignResult / list / dict 的统一 token 提取。"""
+    items = getattr(result, "items", None)
+    if items is None and isinstance(result, list):
+        items = result
+    return items or []
 
 
 def align_with_qwen(wav, texts, language, spec):
-    """Qwen3-ForcedAligner：[文本行] → 每行 [{w, start, end, conf}]。
-    首次运行如与包 API 不符，会抛出带修正指引的错误；对演唱效果以 pdoom 基准实测为准。"""
+    """Qwen3-ForcedAligner：整篇歌词一次调用 → 按行切分 token。
+
+    实测语义（2026-10-02）：单行对全曲会把文本锚到音频开头（必须全文一次调用）；
+    全文调用对长歌有单调漂移（pdoom 中位 ~6.8s）——分段对齐是达标路径（30s 段实测 <40ms），
+    见 MODELS.md「对齐基准」。本函数返回的行时间按 token 顺序切分，供草稿/短歌使用。
+    """
     aligner = _load_qwen_aligner(spec)
+    lang_name = LANGUAGE_NAMES.get(language, language)
+    output = aligner.align(wav, text="\n".join(texts), language=lang_name)
+    tokens = []
+    for item in _result_items(output[0] if isinstance(output, list) else output):
+        text = str(getattr(item, "text", "") or "").strip()
+        if not text:
+            continue
+        tokens.append({"w": text, "start": float(getattr(item, "start_time", 0.0)), "end": float(getattr(item, "end_time", 0.0)),
+                       "conf": float(getattr(item, "confidence", 0.9))})
+    # 按各行的词数切分 token 流（对齐器逐词出 token，与输入词序一致）
     results = []
+    cursor = 0
     for text in texts:
-        output = aligner.align(wav, text=text, language=language)
-        items = output if isinstance(output, list) else getattr(output, "items", output)
-        words = []
-        for item in items:
-            entry = item if isinstance(item, dict) else {"text": getattr(item, "text", str(item)), "start": getattr(item, "start", 0.0), "end": getattr(item, "end", 0.0)}
-            words.append({"w": str(entry.get("text") or entry.get("w") or ""), "start": float(entry.get("start", 0.0)), "end": float(entry.get("end", 0.0)), "conf": float(entry.get("confidence", entry.get("conf", 0.5)))})
-        results.append([word for word in words if word["w"]])
+        count = len(text.split())
+        chunk = tokens[cursor:cursor + count]
+        cursor += count
+        results.append(chunk)
     return results
 
 
 def transcribe_with_qwen(wav, language, spec):
-    try:
-        from qwen_asr import Qwen3ASR  # type: ignore
-    except ImportError as error:
-        raise RuntimeError(f"qwen_asr 未安装或 API 变化（{error}）；请核对包文档后更新 analyzer/analyze.py 的 transcribe_with_qwen") from error
-    model = Qwen3ASR()
-    output = model.transcribe(wav, language=language)
-    text = output.get("text", "") if isinstance(output, dict) else str(output)
-    lines = [{"text": segment.strip(), "start": 0.0, "end": 0.0, "words": []} for segment in text.splitlines() if segment.strip()]
+    """Qwen3-ASR 歌词草稿（humanConfirmed=False；人确认后才能用于规划）。"""
+    from qwen_asr import Qwen3ASRModel  # type: ignore
+    import torch
+    path = os.environ.get("VIDEOGRAPH_QWEN_ASR_DIR") or "Qwen/Qwen3-ASR-1.7B"
+    kwargs = {"torch_dtype": torch.float16} if spec.get("gpu", True) and torch.cuda.is_available() else {}
+    kwargs["device_map"] = "cuda" if spec.get("gpu", True) and torch.cuda.is_available() else "cpu"
+    aligner_dir = os.environ.get("VIDEOGRAPH_QWEN_ALIGNER_DIR") or "Qwen/Qwen3-ForcedAligner-0.6B"
+    model = Qwen3ASRModel.from_pretrained(path, forced_aligner=aligner_dir, **kwargs)
+    lang_name = LANGUAGE_NAMES.get(language, language)
+    outputs = model.transcribe(wav, language=lang_name, return_time_stamps=True)
+    output = outputs[0] if outputs else None
+    tokens = []
+    for item in _result_items(getattr(output, "time_stamps", None)):
+        text = str(getattr(item, "text", "") or "").strip()
+        if not text:
+            continue
+        tokens.append({"w": text, "start": float(getattr(item, "start_time", 0.0)), "end": float(getattr(item, "end_time", 0.0)), "conf": 0.8})
+    # ASR 文本按句末标点切行；行时间 = 行内 token 首尾
+    text = str(getattr(output, "text", "") or "")
+    lines = []
+    token_cursor = 0
+    import re as _re
+    for sentence in _re.split(r"(?<=[.!?。！？])\s+", text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        count = len(sentence.split())
+        chunk = tokens[token_cursor:token_cursor + count]
+        token_cursor += count
+        lines.append({
+            "text": sentence,
+            "start": chunk[0]["start"] if chunk else 0.0,
+            "end": chunk[-1]["end"] if chunk else 0.0,
+            "words": chunk,
+        })
     return {"language": language, "textSource": "asr", "humanConfirmed": False, "lines": lines}
 
 

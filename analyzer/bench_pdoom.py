@@ -51,19 +51,28 @@ def main():
                 aligned = align_with_qwen(wav, [line.strip() for line in args.lyrics_text.splitlines() if line.strip()], args.language, {"gpu": args.gpu})
                 report["t3"] = {"seconds": round(time.time() - started, 1)}
             reference_lyrics = json.loads((reference / "lyrics.json").read_text(encoding="utf-8"))
-            reference_starts = [word["start"] for line in reference_lyrics["lines"] for word in line["words"]]
-            predicted_starts = [word["start"] for line in aligned for word in line]
-            paired = []
-            for index, start in enumerate(predicted_starts):
-                if index < len(reference_starts):
-                    paired.append(abs(start - reference_starts[index]) * 1000)
-            if paired:
-                paired.sort()
-                report["t3"].update({
-                    "words": len(paired),
-                    "wordOnsetErrorMs": {"median": round(paired[len(paired) // 2], 1), "p90": round(paired[int(len(paired) * 0.9)], 1)},
-                    "targetMedianMs": 50,
-                })
+            # 按行配对：对齐器可能把缩写拆成多个 token，跨行扁平索引配对会被错位污染。
+            # 行首误差（每行第一个 token vs 参考行首词）免疫 token 数差异；词级只在词数相同的行内比较。
+            line_errors = []
+            word_errors = []
+            for index, line in enumerate(aligned):
+                if index >= len(reference_lyrics["lines"]) or not line:
+                    continue
+                reference_line = reference_lyrics["lines"][index]
+                line_errors.append(abs(line[0]["start"] - reference_line["words"][0]["start"]) * 1000)
+                if len(line) == len(reference_line["words"]):
+                    for predicted, reference_word in zip(line, reference_line["words"]):
+                        word_errors.append(abs(predicted["start"] - reference_word["start"]) * 1000)
+            def stats(values):
+                if not values:
+                    return None
+                ordered = sorted(values)
+                return {"count": len(ordered), "median": round(ordered[len(ordered) // 2], 1), "p90": round(ordered[int(len(ordered) * 0.9)], 1)}
+            report["t3"].update({
+                "lineStartErrorMs": stats(line_errors),
+                "wordOnsetErrorMs": stats(word_errors),
+                "targetMedianMs": 50,
+            })
         except Exception as error:
             report["t3"] = {"error": str(error)[:400]}
     print(json.dumps(report, ensure_ascii=False, indent=2))

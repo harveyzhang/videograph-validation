@@ -37,6 +37,29 @@ B 下可升级 librosa 1.0 / demucs 4.1；版本变更必须同步 requirements 
 NC 或许可不明的（madmom、MMS_FA、whisperX 默认对齐模型、Demucs htdemucs 权重）不进默认链路；
 Demucs 分轨（T2）只能由用户显式开启并记录在导出清单。
 
+## 模型本地路径（local_dir 模式，绕开 Windows 符号链接特权）
+
+权重不使用 hub 缓存快照（WinError 1314），统一实体拷贝：
+
+- `F:/aicg/.models/local/qwen3-forced-aligner-0.6b`（环境变量 `VIDEOGRAPH_QWEN_ALIGNER_DIR`）
+- `F:/aicg/.models/local/qwen3-asr-1.7b`（环境变量 `VIDEOGRAPH_QWEN_ASR_DIR`）
+
+`src/song/analyzer-runner.mjs` 启动子进程时会注入这两个默认值；`HF_HOME` 默认 `F:/aicg/.models`。
+下载/续传：`python analyzer/download_models.py`（同样 local_dir 模式；断线可直接重跑续传）。
+{"download": "qwen3-asr-1.7b", "repo": "Qwen/Qwen3-ASR-1.7B", "target": "F:\aicg\.models\local\qwen3-asr-1.7b"}
+{"downloaded": "qwen3-asr-1.7b", "path": "F:\aicg\.models\local\qwen3-asr-1.7b"}
+{"done": true}（同样 local_dir 模式，可断点重试）。
+
+## 实测 API（qwen-asr 0.0.6，2026-10-02）
+
+- 对齐： →  → （秒）；语言用全名（zh→Chinese）。
+- ASR： →  → 。
+
+## 实测 API（qwen-asr 0.0.6，2026-10-02 于 T3 环境）
+
+- 对齐：`Qwen3ForcedAligner.from_pretrained(path, dtype='float16', device_map='cuda')` → `align(audio, text, language='English')`（语言用全名，zh→Chinese）→ `result.items[].text/.start_time/.end_time`（秒）。**必须整篇歌词一次调用**（单行对全曲会把文本锚到音频开头）；时间戳粒度约 20ms。
+- ASR：`Qwen3ASRModel.from_pretrained(path, dtype=..., device_map=...)` → `transcribe(audio, language='Chinese', return_time_stamps=True)` → `result.sentences[].text/.start_time/.end_time`。
+
 ## 自检
 
 ```sh
