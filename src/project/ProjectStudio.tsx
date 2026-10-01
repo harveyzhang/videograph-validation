@@ -194,7 +194,7 @@ export default function ProjectStudio() {
   return <div className="app-shell project-shell">
     <header className="topbar"><div className="brand-lockup"><Layers3 size={19} /><strong>VideoGraph</strong><span>真实工程工作台</span></div>
       <span className="project-title">{project?.name ?? '从一首 BGM 开始'}</span>
-      <div className="top-actions"><a className="toolbar-button" href="?view=shot">单镜头工坊</a><a className="toolbar-button" href="?view=pdoom">教学模式</a>
+      <div className="top-actions">
         <button className="run-button" title={unaccepted ? '先校验候选并接受人工修改意见，再导出正式版本' : '导出冻结版本'} disabled={!project || busy || unaccepted || needsGeneration || activeJobs.some((job) => job.kind === 'export')} onClick={() => void act(async () => {
           const job = await projectApi<ProjectJob>(`/projects/${project!.id}/render`, { fps: project!.output.fps, samples: project!.output.samples }); setJobs((previous) => [job, ...previous]);
         })}><Download size={14} />导出完整 PV</button></div>

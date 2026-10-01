@@ -110,3 +110,59 @@ body { margin: 0; min-width: 1100px; min-height: 720px; overflow: hidden; backgr
 .project-element-editor { display: grid; gap: 7px; margin: 10px 0; padding: 9px; border: 1px solid var(--line-2); border-radius: 6px; }
 .project-lyric-inspector > .field, .project-lyric-inspector > .project-inspector-actions { margin: 10px 0; }
 @media (forced-colors: active) { .project-shot-node.is-selected, .project-transition-node.is-selected { outline: 2px solid Highlight; } }
+
+/* ==== 以下为原 styles.css 中工程工作台复用的外壳/节点样式（CLEANUP-01 迁移） ==== */
+
+.studio-node input,.studio-node textarea,.studio-node select,.modal input,.modal textarea,.modal select{user-select:text;-webkit-user-select:text}
+.app-shell{height:100vh;display:grid;grid-template-rows:46px minmax(0,1fr) 28px;background:var(--bg)}
+.topbar{display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid var(--line);background:#1e1e1e;user-select:none;-webkit-user-select:none}
+.brand-lockup{display:flex;align-items:center;gap:9px;padding:5px 11px 5px 7px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2)}
+.brand-lockup strong{font-size:12px;font-weight:700;letter-spacing:.04em}
+.brand-lockup span{margin-left:7px;color:var(--faint);font-size:10px}
+.top-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.toolbar-button,.run-button,.icon-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;transition:border .15s,background .15s}
+.toolbar-button{padding:7px 12px;border-radius:var(--radius);color:#c8c8c8;font-size:11px}
+.toolbar-button:hover,.icon-button:hover{border-color:var(--line-2);color:var(--text);background:#333}
+.run-button{padding:8px 16px;border-radius:var(--radius);border-color:#1d4a26;color:#fff;background:var(--green);font-size:12px;font-weight:700}
+.run-button:hover:not(:disabled){background:var(--green-hi)}
+.run-button:disabled{opacity:.5;cursor:not-allowed}
+.sidebar{background:var(--panel);min-width:0;min-height:0;overflow-y:auto;user-select:none;-webkit-user-select:none}
+.sidebar-title{display:flex;align-items:center;justify-content:space-between;color:silver;font-size:12px;font-weight:700}
+.canvas-toolbar{display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:#1e1e1e;-webkit-user-select:none;user-select:none}
+.studio-node{width:336px;overflow:hidden;border:1px solid #171717;border-radius:10px;background:var(--node);box-shadow:0 5px 16px #00000073}
+.studio-node.is-selected{border-color:#e8e8e8;box-shadow:0 0 0 2px #ffffff29,0 8px 22px #00000080}
+.studio-node.is-locked{border-color:#6b5a2a}
+.studio-node.is-locked .code-preview{opacity:.78}
+.node-header{display:flex;align-items:center;gap:8px;min-height:30px;padding:5px 10px;border-bottom:1px solid rgba(0,0,0,.35);font-weight:700}
+.prompt-node .node-header{background:#3e5a33}
+.steer-node .node-header{background:#6b5a2a}
+.code-node .node-header{background:#3b4a6b}
+.render-node .node-header{background:#6b4a33}
+.act-node .node-header{background:#5a3b5a}
+.memory-node .node-header{background:#2f5a52}
+.node-heading{display:grid;min-width:0}
+.node-heading strong{font-size:12px;color:#fff}
+.node-eyebrow{color:#ffffff9e;font-size:9px;letter-spacing:.06em}
+.node-header .lock-chip+.status{margin-left:6px}
+.node-body{display:grid;gap:10px;padding:11px}
+.field{display:grid;gap:4px}
+.field textarea{min-height:34px;resize:vertical}
+.field input,.field textarea,select,.act-name-input{width:100%;outline:0;border:1px solid rgba(0,0,0,.5);border-radius:6px;padding:6px 8px;color:#d8d8d8;background:var(--widget);font-size:11px;line-height:1.45}
+.field textarea:focus,select:focus,.act-name-input:focus{border-color:var(--line-2)}
+.action-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:30px;border:1px solid rgba(0,0,0,.5);border-radius:6px;color:#e4e4e4;background:#2e2e2e;font-size:11px;font-weight:600;cursor:pointer}
+.action-button:hover:not(:disabled){background:#383838}
+.action-button:disabled{opacity:.6;cursor:wait}
+.mini-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1px solid rgba(0,0,0,.5);border-radius:6px;color:silver;background:#2b2b2b;font-size:10px;cursor:pointer}
+.mini-button:hover{color:var(--text);background:#333}
+.mini-button.accent-violet{color:var(--warn)}
+.node-footer{display:flex;align-items:center;justify-content:space-between;min-height:26px;padding:0 11px;border-top:1px solid rgba(0,0,0,.35);color:var(--muted);font-size:10px}
+.node-footer span:first-child{display:flex;align-items:center;gap:5px}
+.steer-node .field textarea{min-height:72px}
+.statusbar{display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-top:1px solid var(--line);color:var(--muted);background:#1e1e1e;font-size:10px;-webkit-user-select:none;user-select:none}
+.statusbar>div:first-child{display:flex;align-items:center;gap:7px;color:#c8c8c8}
+.modal-overlay{position:fixed;top:0;right:0;bottom:0;left:0;z-index:60;display:grid;place-items:center;background:#000000a8}
+.cache-policy button.active{border-color:#8ce99a;color:#d3f9d8;background:#2f5a39}
+.shot-actions .mini-button { display: inline-flex; align-items: center; gap: 5px; }
+.shot-actions .mini-button:disabled { opacity: 0.42; cursor: not-allowed; }
+.shot-lint { font-size: 11px; color: #ffd166; line-height: 1.6; }
+.shot-error { font-size: 11px; color: #ff5a48; line-height: 1.6; background: rgba(194, 29, 11, 0.12); border: 1px solid rgba(194, 29, 11, 0.4); border-radius: 8px; padding: 7px 10px; }

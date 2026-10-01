@@ -373,7 +373,7 @@ skills/shotcraft/
 
 本轮全量产品测试（领域测试、六项回归、工程视图、参考引擎、转场集成审计）结论为产品功能无缺陷；以下为测试中发现并登记的工具链/运维问题。均为 ⬜ 未修复；BUG-01/02 与 FB-04 同属验收脚本域，可在 FB-04 开工时一并处理（修复须按 QA-01 边界：只改测试脚本，不为让测试变绿改产品实现）。
 
-- **BUG-01** ⬜ `scripts/project-view-audit.mjs:33` 断言绑定工程文案：等待 `.project-inspector .sidebar-title` 含“副歌”，隐含假设第 4 镜头标题为“第一次副歌”（仅工程 `62a1d69e` 成立）。对工程 `052d3bd1`（第 4 镜头“风险登记 / 第一次上调”）30s 超时失败。已复现（本轮首跑即挂）。建议：先从服务读取工程数据，断言 inspector 标题等于所选镜头实际 `title`，不再硬编码文案。
+- **BUG-01** ✅ 已修复（2026-10-01，随 CLEANUP-01）：断言改为数据驱动——从镜头列表读取所选镜头真实标题再断言 inspector，不再硬编码文案。`scripts/project-view-audit.mjs` 对任意工程可用。
 - **BUG-02** ⬜ `scripts/mcp-server-test.mjs` 单独运行后 `.queue/req-mcptest-1.json`、`res-mcptest-1.json` 残留：`audit-all.mjs` 的 finally 会清理这两个固定 fixture，但直接运行该测试脚本不做清理；残留会触发 audit-all 开头的“队列已有工作”保护，挡住下次 `npm run audit`。本轮已手工删除后恢复。建议：test 脚本加 try/finally 自清理（同 audit-all 的 fixtureFiles 逻辑）。
 - **BUG-03** ⬜（运维提醒，低优先）工程服务（5191）无热重载，启动早于源码修改时静默运行旧代码：本轮实测服务 19:12:44 启动、27 个源文件 19:16:03 修改，测试前提失效，重启后全绿。建议任选其一：启动日志打印启动时间与提示；或 `/health` 返回 `bootTime`，审计脚本比对 `src/` 最新 mtime 并警告。
 
@@ -516,7 +516,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | FB-02 / FB-03 / FB-04 | ⬜ 待认领；FB-01 契约已在 main，可直接开工，详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话认领（2026-10-02，用户指派全系列），实现中 | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 按序 SONG-00→(01∥02∥03)→04→05→06；SONG-06 验收由本会话（QA-01 owner）执行；模型下载/建 Python 环境前逐项征得用户同意；SONG-05 的 MCP 注册与路由由集成者合并 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
-| CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | 当前 AI（集成者）认领，2026-10-01，进行中 | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`、旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（仅保留 `project_*` 工具） | 热点文件改动由集成者（本人）执行；MCP 工具删减同步 `docs/MCP-GUIDE.md` + sync-platform + bump skill version；不改 `src/server` 领域语义与前端 `src/project`、`src/brand`、`src/song`；全量验收通过后才合回 main |
+| CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |
 
 认领方式：先在本节登记工作包、分支、范围与状态，再开始编辑。没有登记的同事不被视为已经接单；需要跨范围修改时，先把建议交给对应 owner/集成者，不能两边同时覆盖同一文件。
 
