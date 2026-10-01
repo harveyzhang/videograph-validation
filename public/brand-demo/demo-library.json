@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "revision": 0,
+  "updatedAt": 0,
+  "guidelines": {
+    "palette": [
+      { "name": "墨黑", "hex": "#0A0A0B", "usage": "底色" },
+      { "name": "骨白", "hex": "#EEE9DF", "usage": "主文字" },
+      { "name": "信号橙", "hex": "#FF4D12", "usage": "唯一强调色" },
+      { "name": "余烬", "hex": "#FF8A3D", "usage": "次级辉光" }
+    ],
+    "allowedFonts": [
+      { "family": "Arial", "weights": [400, 700, 900], "note": "系统栈兜底" },
+      { "family": "monospace", "note": "数据读数与标签" }
+    ],
+    "requiredElements": ["左下角 Logo 水印", "末帧版权信息"],
+    "forbidden": ["紫色霓虹赛博朋克", "发光大脑", "Matrix 代码雨", "AI 生成感图样"],
+    "notes": "演示数据：仅用于 BrandPanel 联调，不构成任何真实品牌的资产库。"
+  },
+  "assets": [
+    { "id": "demo-logo-01", "name": "产品 Logo 主标", "kind": "logo", "hash": "0000000000000000000000000000000000000000000000000000000000000000", "bytes": 1024, "ref": "blobs/demo", "copyright": "© G1en；仅限本产品演示", "locked": true, "referencedBy": ["shot:open:logo"], "createdAt": 0, "updatedAt": 0 },
+    { "id": "demo-copy-01", "name": "宣发口号 v2", "kind": "copy", "hash": "1111111111111111111111111111111111111111111111111111111111111111", "bytes": 256, "ref": "blobs/demo", "copyright": "原创文案", "locked": false, "referencedBy": [], "createdAt": 0, "updatedAt": 0 }
+  ]
+}
