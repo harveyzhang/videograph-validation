@@ -1,0 +1,12 @@
+# SONG-01 分析依赖（方案 A：克隆自 pytorch 环境，Python 3.9；torch 2.8.0+cu128 已在克隆内）
+# 版本选择原则：仍支持 Python 3.9 的最新稳定版；qwen-asr 锁定 transformers==4.57.6
+librosa==0.10.2.post1
+soundfile>=0.12.1,<0.14
+demucs==4.0.1
+beat-this==1.1.0
+faster-whisper==1.2.1
+qwen-asr==0.0.6
+transformers==4.57.6
+accelerate==1.12.0
+numpy>=1.26,<3.0
+scipy>=1.11,<1.16
