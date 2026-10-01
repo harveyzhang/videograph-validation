@@ -516,6 +516,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | FB-02 / FB-03 / FB-04 | ⬜ 待认领；FB-01 契约已在 main，可直接开工，详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话认领（2026-10-02，用户指派全系列），实现中 | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 按序 SONG-00→(01∥02∥03)→04→05→06；SONG-06 验收由本会话（QA-01 owner）执行；模型下载/建 Python 环境前逐项征得用户同意；SONG-05 的 MCP 注册与路由由集成者合并 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
+| CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | 当前 AI（集成者）认领，2026-10-01，进行中 | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`、旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（仅保留 `project_*` 工具） | 热点文件改动由集成者（本人）执行；MCP 工具删减同步 `docs/MCP-GUIDE.md` + sync-platform + bump skill version；不改 `src/server` 领域语义与前端 `src/project`、`src/brand`、`src/song`；全量验收通过后才合回 main |
 
 认领方式：先在本节登记工作包、分支、范围与状态，再开始编辑。没有登记的同事不被视为已经接单；需要跨范围修改时，先把建议交给对应 owner/集成者，不能两边同时覆盖同一文件。
 
