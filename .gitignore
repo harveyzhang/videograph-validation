@@ -40,3 +40,7 @@ Thumbs.db
 .idea/
 .claude/skills/
 .claude/worktrees/
+
+# Python
+__pycache__/
+*.pyc
