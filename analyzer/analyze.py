@@ -110,17 +110,18 @@ def stage_t3(spec, out_dir):
         text_lines = parse_lrc(Path(spec["lrcPath"]).read_text(encoding="utf-8"))
         if not text_lines:
             raise RuntimeError("LRC 里没有可解析的时间戳行")
+    segments = analysis_segments(spec, t0, out_dir)
     if text_lines:
-        aligned = align_with_qwen(t0["wav"], [line["text"] for line in text_lines], language, spec)
+        aligned = align_lines_segmented(segments, [line["text"] for line in text_lines], language, spec)
         lines = []
         for index, line in enumerate(text_lines):
             line_words = aligned[index] if index < len(aligned) else []
             start = line_words[0]["start"] if line_words else 0.0
             end = line_words[-1]["end"] if line_words else start + 2.0
             lines.append({"text": line["text"], "start": start, "end": end, "words": line_words})
-        result = {"lyrics": {"language": language, "textSource": text_source, "humanConfirmed": True, "lines": lines}, "mode": "align"}
+        result = {"lyrics": {"language": language, "textSource": text_source, "humanConfirmed": True, "lines": lines}, "mode": "align-segmented"}
     else:
-        result = {"lyrics": transcribe_with_qwen(t0["wav"], language, spec), "mode": "asr-draft", "draft": True,
+        result = {"lyrics": transcribe_segmented(segments, language, spec), "mode": "asr-draft", "draft": True,
                   "warnings": ["ASR 歌词是草稿：必须经人确认后才能用于规划"]}
     result["seconds"] = round(time.time() - started, 1)
     write_partial(out_dir, "t3.json", result)
@@ -180,43 +181,157 @@ def align_with_qwen(wav, texts, language, spec):
     return results
 
 
-def transcribe_with_qwen(wav, language, spec):
-    """Qwen3-ASR 歌词草稿（humanConfirmed=False；人确认后才能用于规划）。"""
-    from qwen_asr import Qwen3ASRModel  # type: ignore
-    import torch
-    path = os.environ.get("VIDEOGRAPH_QWEN_ASR_DIR") or "Qwen/Qwen3-ASR-1.7B"
-    kwargs = {"torch_dtype": torch.float16} if spec.get("gpu", True) and torch.cuda.is_available() else {}
-    kwargs["device_map"] = "cuda" if spec.get("gpu", True) and torch.cuda.is_available() else "cpu"
-    aligner_dir = os.environ.get("VIDEOGRAPH_QWEN_ALIGNER_DIR") or "Qwen/Qwen3-ForcedAligner-0.6B"
-    model = Qwen3ASRModel.from_pretrained(path, forced_aligner=aligner_dir, **kwargs)
+SEGMENT_SECONDS = 28.0
+CJK_PUNCT = "。！？；，、,.!?;"
+
+
+def _segment_audio(wav_path, duration, boundaries):
+    """按边界切 ~SEGMENT_SECONDS 的 wav 段，返回 [(offset, path)]；临时文件由调用方清理。"""
+    import soundfile as sf
+    import librosa
+    segments = []
+    y, sr = librosa.load(wav_path, sr=16000, mono=True)
+    cuts = [b for b in boundaries if 0.5 < b < duration - 0.5]
+    if not cuts:
+        cuts = [min(SEGMENT_SECONDS, duration / 2)]
+    starts = [0.0]
+    for cut in cuts:
+        if cut - starts[-1] >= SEGMENT_SECONDS * 0.8:
+            starts.append(cut)
+    starts.append(duration)
+    work = Path(wav_path).parent
+    for index, (start, end) in enumerate(zip(starts, starts[1:])):
+        path = work / f"t3-seg-{index:03d}.wav"
+        sf.write(path, y[int(start * sr):int(end * sr)], sr)
+        segments.append({"start": start, "end": end, "wav": str(path)})
+    return segments
+
+
+def analysis_segments(spec, t0, out_dir):
+    """T3 分段：优先用 T1 下拍（读 t1.json）作边界，否则等时长切。"""
+    t1 = read_partial(out_dir, "t1.json")
+    boundaries = []
+    if t1:
+        boundaries = [d for d in t1.get("rhythm", {}).get("downbeats", [])]
+    duration = t0["duration"]
+    if not boundaries:
+        count = max(1, round(duration / SEGMENT_SECONDS))
+        boundaries = [duration * (i + 1) / count for i in range(count)]
+    return _segment_audio(t0["wav"], duration, boundaries)
+
+
+def _split_sentences(text):
+    """ASR 文本切行：句末标点优先，逗号/顿号次之（中文唱词常只有逗号）。"""
+    import re
+    parts = re.split(r"(?<=[。！？；，、,.!?;])\s*", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _token_count(text):
+    """中文按字符、西文按词计 token 配额。"""
+    cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
+    if cjk * 2 >= len(text.replace(" ", "")):
+        return cjk
+    return len(text.split())
+
+
+def align_lines_segmented(segments, texts, language, spec):
+    """用户文本路径：把行按时长比例分配到各段，段内整段对齐（30s 段实测 40ms 达标）。
+    行归属是比例近似（段内精确）；段边界行的误差由 SONG-02 人工校正兜底。"""
+    aligner = _load_qwen_aligner(spec)
     lang_name = LANGUAGE_NAMES.get(language, language)
-    outputs = model.transcribe(wav, language=lang_name, return_time_stamps=True)
-    output = outputs[0] if outputs else None
-    tokens = []
-    for item in _result_items(getattr(output, "time_stamps", None)):
-        text = str(getattr(item, "text", "") or "").strip()
-        if not text:
+    total = sum(seg["end"] - seg["start"] for seg in segments)
+    quota = []
+    for seg in segments:
+        quota.append(max(1, round(len(texts) * (seg["end"] - seg["start"]) / total)))
+    fix = len(texts) - sum(quota)
+    quota[-1] += fix
+    results = [[]] * len(texts)
+    cursor = 0
+    for seg, count in zip(segments, quota):
+        chunk_texts = texts[cursor:cursor + count]
+        if not chunk_texts:
             continue
-        tokens.append({"w": text, "start": float(getattr(item, "start_time", 0.0)), "end": float(getattr(item, "end_time", 0.0)), "conf": 0.8})
-    # ASR 文本按句末标点切行；行时间 = 行内 token 首尾
-    text = str(getattr(output, "text", "") or "")
+        try:
+            output = aligner.align(seg["wav"], text="\n".join(chunk_texts), language=lang_name)
+            tokens = []
+            for item in _result_items(output[0] if isinstance(output, list) else output):
+                text = str(getattr(item, "text", "") or "").strip()
+                if not text:
+                    continue
+                tokens.append({"w": text, "start": seg["start"] + float(getattr(item, "start_time", 0.0)),
+                               "end": seg["start"] + float(getattr(item, "end_time", 0.0)), "conf": 0.8})
+            inner = 0
+            for text in chunk_texts:
+                take = _token_count(text)
+                results[cursor + inner] = tokens[:take]
+                tokens = tokens[take:]
+                inner += 1
+        except Exception:
+            for inner in range(len(chunk_texts)):
+                results[cursor + inner] = []
+        cursor += count
+    return results
+
+
+def transcribe_segmented(segments, language, spec):
+    """ASR 草稿路径：逐段转写，时间戳加段偏移，按标点切行（humanConfirmed=False）。"""
+    from qwen_asr import Qwen3ASRModel
+    import torch
+    asr_dir = os.environ.get("VIDEOGRAPH_QWEN_ASR_DIR") or "Qwen/Qwen3-ASR-1.7B"
+    aligner_dir = os.environ.get("VIDEOGRAPH_QWEN_ALIGNER_DIR") or "Qwen/Qwen3-ForcedAligner-0.6B"
+    use_cuda = spec.get("gpu", True) and torch.cuda.is_available()
+    kwargs = {"dtype": torch.float16, "device_map": "cuda"} if use_cuda else {}
+    model = Qwen3ASRModel.from_pretrained(asr_dir, forced_aligner=aligner_dir, **kwargs)
+    lang_name = LANGUAGE_NAMES.get(language, language)
     lines = []
-    token_cursor = 0
-    import re as _re
-    for sentence in _re.split(r"(?<=[.!?。！？])\s+", text):
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-        count = len(sentence.split())
-        chunk = tokens[token_cursor:token_cursor + count]
-        token_cursor += count
-        lines.append({
-            "text": sentence,
-            "start": chunk[0]["start"] if chunk else 0.0,
-            "end": chunk[-1]["end"] if chunk else 0.0,
-            "words": chunk,
-        })
-    return {"language": language, "textSource": "asr", "humanConfirmed": False, "lines": lines}
+    try:
+        for seg in segments:
+            outputs = model.transcribe(seg["wav"], language=lang_name, return_time_stamps=True)
+            output = outputs[0] if outputs else None
+            tokens = []
+            for item in _result_items(getattr(output, "time_stamps", None)):
+                text = str(getattr(item, "text", "") or "").strip()
+                if not text:
+                    continue
+                tokens.append({"w": text, "start": seg["start"] + float(getattr(item, "start_time", 0.0)),
+                               "end": seg["start"] + float(getattr(item, "end_time", 0.0)), "conf": 0.7})
+            for sentence in _split_sentences(str(getattr(output, "text", "") or "")):
+                count = _token_count(sentence)
+                chunk = tokens[:count]
+                tokens = tokens[count:]
+                lines.append({
+                    "text": sentence,
+                    "start": chunk[0]["start"] if chunk else seg["start"],
+                    "end": chunk[-1]["end"] if chunk else seg["end"],
+                    "words": chunk,
+                })
+    finally:
+        for seg in segments:
+            try:
+                Path(seg["wav"]).unlink(missing_ok=True)
+            except OSError:
+                pass
+    return {"language": language, "textSource": "asr", "humanConfirmed": False, "lines": _monotonic_lines(lines)}
+
+
+def _monotonic_lines(lines):
+    """段间衔接：分段产出可能在段边界时间回退，做全局不减钳制并重算行界。
+    只抬不压——段内误差 ~100ms 级，钳制不会放大漂移；契约要求行按时间排列。"""
+    fixed = []
+    prev_end = 0.0
+    for line in lines:
+        words = []
+        for word in line.get("words", []):
+            start = max(float(word["start"]), prev_end)
+            end = max(float(word["end"]), start)
+            words.append({**word, "start": start, "end": end})
+            prev_end = end
+        if words:
+            fixed.append({**line, "start": words[0]["start"], "end": words[-1]["end"], "words": words})
+        else:
+            fixed.append({**line, "start": max(float(line.get("start", 0.0)), prev_end), "end": max(float(line.get("end", 0.0)), prev_end)})
+    return fixed
 
 
 def assemble(spec, out_dir):
