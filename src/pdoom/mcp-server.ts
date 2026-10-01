@@ -8,6 +8,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { projectToolDefinitions, callProjectTool } from '../server/mcp-tools.ts';
+import { feedbackToolDefinitions, feedbackToolNames, callFeedbackTool, mcpToolResult } from '../server/mcp-feedback-tools.ts';
 import { pdoomTasks, type PdoomTaskId } from './tasks.ts';
 import {
   listRequests,
@@ -51,6 +52,7 @@ function runTask(taskId: PdoomTaskId, argsOverride: string[] = []): Promise<{ co
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     ...projectToolDefinitions,
+    ...feedbackToolDefinitions,
     { name: 'pdoom_inspect_project', description: '读取 P(DOOM) 工程的固定目录、工具依赖和可用任务，不执行命令。', inputSchema: { type: 'object', properties: {} } },
     { name: 'pdoom_run_analysis', description: '运行已声明的 P(DOOM) 音频分析任务。只能传 taskId，不接受任意 shell。', inputSchema: { type: 'object', properties: { taskId: { type: 'string', enum: ['analyze-stems', 'align-lyrics', 'analyze-audio'] } }, required: ['taskId'] } },
     { name: 'pdoom_render', description: '调用 P(DOOM) 已有的 stills/video/plates/perf 渲染模式。', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['stills', 'video', 'plates', 'perf'] }, from: { type: 'number' }, to: { type: 'number' }, out: { type: 'string' } }, required: ['mode'] } },
@@ -91,8 +93,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const name = request.params.name;
+  const args = request.params.arguments ?? {};
+  // FB-03 意见工具优先分发；stills 结果（含 project_job_get）以 image 内容返回。
+  if (feedbackToolNames.has(name)) {
+    try { return mcpToolResult(await callFeedbackTool(name, args)); }
+    catch (error) { return textResult({ error: String(error), hint: '工程服务需要运行：npm run service' }, true); }
+  }
   if (projectToolDefinitions.some((tool) => tool.name === name)) {
-    try { return textResult(await callProjectTool(name, request.params.arguments ?? {})); }
+    try { return mcpToolResult(await callProjectTool(name, args)); }
     catch (error) { return textResult({ error: String(error), hint: '工程服务需要运行：npm run service' }, true); }
   }
   if (name === 'pdoom_inspect_project') {

@@ -45,9 +45,11 @@ export interface VideoProject {
   shots: ProjectShot[];
   transitions: ProjectTransition[];
 }
+export interface StillsImage { t: number; file: string }
+export interface StillsSummary { targetKind: 'shot' | 'transition'; targetId: string; times: number[]; version: 'current' | 'before-feedback'; width: number }
 export interface ProjectJob {
   id: string;
-  kind: 'validate' | 'validate-transition' | 'export';
+  kind: 'validate' | 'validate-transition' | 'export' | 'stills';
   status: string;
   progress: number;
   detail?: string;
@@ -55,7 +57,8 @@ export interface ProjectJob {
   inputRevision: number;
   shotId?: string;
   transitionId?: string;
-  result?: { file?: string; frames?: number; seconds?: number; reports?: Array<{ cached: boolean }> };
+  stills?: StillsSummary;
+  result?: { file?: string; frames?: number; seconds?: number; reports?: Array<{ cached: boolean }>; stills?: { images: StillsImage[] } };
 }
 export interface ProjectSummary { id: string; name: string; shots: number; duration: number; revision: number }
 
