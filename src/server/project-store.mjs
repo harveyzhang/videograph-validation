@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { referenceShots } from './reference-plan.mjs';
 import { ProjectError } from './errors.mjs';
 import { prepareLyricPlan, shotLyricContext } from './lyric-elements.mjs';
-import { normalizeProject, transitionPair, transitionConfig, validateTransitionConfig } from './transitions.mjs';
+import { normalizeProject, transitionPair, transitionConfig, validateTransitionConfig, transitionWindow } from './transitions.mjs';
+import { prepareFeedbackInput, createNote, invalidateResponses, prepareResponses, applyResponses, askOnNote, replyOnNote, inboxItems, feedbackTargetWindow, lyricElementIds } from './feedback.mjs';
 export { ProjectError } from './errors.mjs';
 
 export const productRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -147,12 +148,6 @@ function restoreSnapshot(target, snapshot) {
     else target[key] = structuredClone(snapshot[key]);
   }
 }
-function invalidateResponses(shot) {
-  for (const note of shot.feedback ?? []) if (note.status === 'responded') {
-    note.status = 'pending'; note.invalidatedAt = Date.now();
-    delete note.codeHash; delete note.responseInputToken;
-  }
-}
 
 export function updateShot(id, shotId, expectedInputRevision, patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some((key) => !['title', 'prompt', 'params', 'lyricPlan', 'locked'].includes(key))) throw new ProjectError('unsupported shot patch');
@@ -197,13 +192,13 @@ export function readShotSource(id, shotId) {
   return { shot, code: readFileSync(join(engine, `app/src/scenes/${shot.module}.ts`), 'utf8'),
     contract: readFileSync(join(engine, 'docs/ENGINE.md'), 'utf8'), lyricContext: shotLyricContext(project, shot), source: shot.source };
 }
-export function submitShotSource(id, shotId, expectedInputRevision, code, summary = '', addressedFeedbackIds = [], author = 'mcp') {
+export function submitShotSource(id, shotId, expectedInputRevision, code, summary = '', addressedFeedbackIds = [], author = 'mcp', feedbackResponses = []) {
   if (typeof code !== 'string' || code.length < 20 || code.length > 200000) throw new ProjectError('invalid scene code');
   if (!['mcp', 'human'].includes(author)) throw new ProjectError('invalid source author');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
     if (shot.locked) throw new ProjectError('镜头已锁定', 409);
-    if (!Array.isArray(addressedFeedbackIds) || addressedFeedbackIds.some((feedbackId) => !(shot.feedback ?? []).some((note) => note.id === feedbackId && note.status !== 'accepted'))) throw new ProjectError('反馈 ID 必须来自本镜头尚未接受的意见');
+    const responses = prepareResponses(shot, addressedFeedbackIds ?? [], feedbackResponses ?? []);
     shot.previousVersion = versionSnapshot(shot);
     const hash = sha256(code);
     const module = `vg-${hash}`;
@@ -218,19 +213,20 @@ export function submitShotSource(id, shotId, expectedInputRevision, code, summar
     shot.inputToken = randomUUID();
     shot.status = 'needs-validation';
     invalidateResponses(shot);
-    for (const note of shot.feedback ?? []) if (addressedFeedbackIds.includes(note.id)) {
-      note.status = 'responded'; note.respondedAt = Date.now(); note.codeHash = hash; note.responseInputToken = shot.inputToken;
-    }
+    applyResponses(shot, responses, { codeHash: hash, inputToken: shot.inputToken, author });
     delete shot.validation;
     return project;
   });
 }
 
-export function addShotFeedback(id, shotId, expectedInputRevision, text, kind = 'shot') {
-  if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new ProjectError('修改意见不能为空或超过 8000 字符');
+/** input 可以是意见文本（旧调用），或 { text, anchor?, preserve?, author? }（FB-01 契约，见 feedback.mjs）。 */
+export function addShotFeedback(id, shotId, expectedInputRevision, input, kind = 'shot') {
+  const raw = typeof input === 'string' ? { text: input } : (input && typeof input === 'object' && !Array.isArray(input) ? input : { text: undefined });
   return mutateProject(id, undefined, (project) => {
     const shot = targetFor(project, shotId, expectedInputRevision, kind);
     if (shot.locked) throw new ProjectError('镜头已锁定，请先解锁后添加修改意见', 409);
+    const pair = kind === 'transition' ? transitionPair(project, shot) : null;
+    const prepared = prepareFeedbackInput(raw, { window: feedbackTargetWindow(project, shot, kind, pair), elementIds: lyricElementIds(shot, kind, pair), fps: project.output?.fps ?? 30 });
     shot.feedback ??= [];
     if (!shot.feedback.some((note) => note.status !== 'accepted')) {
       shot.reviewBaseline = versionSnapshot(shot);
@@ -240,7 +236,7 @@ export function addShotFeedback(id, shotId, expectedInputRevision, text, kind = 
       }
     }
     invalidateResponses(shot);
-    shot.feedback.push({ id: randomUUID(), text: text.trim(), status: 'pending', baseInputRevision: shot.inputRevision, createdAt: Date.now() });
+    shot.feedback.push(createNote(prepared, shot, randomUUID()));
     shot.inputRevision++;
     shot.inputToken = randomUUID();
     shot.status = 'needs-generation';
@@ -298,24 +294,49 @@ export function updateTransition(id, transitionId, expectedInputRevision, patch)
     return project;
   });
 }
-export function configureTransition(id, transitionId, expectedInputRevision, config, addressedFeedbackIds = [], author = 'mcp') {
+export function configureTransition(id, transitionId, expectedInputRevision, config, addressedFeedbackIds = [], author = 'mcp', feedbackResponses = []) {
   if (!['human', 'mcp'].includes(author)) throw new ProjectError('invalid transition author');
   return mutateProject(id, undefined, (project) => {
     const transition = targetFor(project, transitionId, expectedInputRevision, 'transition');
     if (transition.locked) throw new ProjectError('转场已锁定，请先解锁', 409);
-    if (!Array.isArray(addressedFeedbackIds) || addressedFeedbackIds.some((feedbackId) => !(transition.feedback ?? []).some((note) => note.id === feedbackId && note.status !== 'accepted'))) throw new ProjectError('无效转场反馈 ID');
+    const responses = prepareResponses(transition, addressedFeedbackIds ?? [], feedbackResponses ?? []);
     const checked = validateTransitionConfig(project, transition, config);
     transition.previousVersion = versionSnapshot(transition);
     Object.assign(transition, checked);
     transition.inputRevision++; transition.inputToken = randomUUID(); transition.status = 'needs-validation';
     transition.source = `${author}-configured`; transition.codeHash = sha256(JSON.stringify(transitionConfig(transition)));
     invalidateResponses(transition);
-    for (const note of transition.feedback ?? []) if (addressedFeedbackIds.includes(note.id)) {
-      note.status = 'responded'; note.respondedAt = Date.now(); note.codeHash = transition.codeHash; note.responseInputToken = transition.inputToken;
-    }
+    applyResponses(transition, responses, { codeHash: transition.codeHash, inputToken: transition.inputToken, author });
     delete transition.validation;
     return project;
   });
+}
+
+function feedbackTarget(project, kind, targetId) {
+  if (kind !== 'shot' && kind !== 'transition') throw new ProjectError('targetKind 只支持 shot / transition');
+  const target = (kind === 'shot' ? project.shots : project.transitions).find((entry) => entry.id === targetId);
+  if (!target) throw new ProjectError(`${kind} not found`, 404);
+  return target;
+}
+/** AI 提问澄清：不改变输入版本，只改变该意见状态（needs-clarification 不能被接受，导出仍被拦截）。 */
+export function askFeedback(id, kind, targetId, feedbackId, question, by = 'mcp') {
+  return mutateProject(id, undefined, (project) => { askOnNote(feedbackTarget(project, kind, targetId), feedbackId, question, by); return project; });
+}
+/** 人回复澄清，意见回到 pending。 */
+export function replyFeedback(id, kind, targetId, feedbackId, text, by = 'human') {
+  return mutateProject(id, undefined, (project) => { replyOnNote(feedbackTarget(project, kind, targetId), feedbackId, text, by); return project; });
+}
+/** 待办收件箱；省略 projectId 时汇总全部本地工程。 */
+export function feedbackInbox({ projectId, status = 'open' } = {}) {
+  const ids = projectId ? [projectId] : listProjects().map((project) => project.id);
+  const items = ids.flatMap((pid) => {
+    const project = readProject(pid);
+    return inboxItems(project, { status, windowOf: (kind, target) => {
+      if (kind === 'shot') return { start: target.start, end: target.end };
+      try { return transitionWindow(project, target); } catch { return null; }
+    } });
+  });
+  return { status, count: items.length, items, rule: 'AI 只能响应或提问；采用/拒绝由人在界面完成。' };
 }
 
 export function saveJob(id, job) {

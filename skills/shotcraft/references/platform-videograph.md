@@ -45,7 +45,7 @@ projects/<uuid>/
 
 <!-- BEGIN:generated-from-MCP-GUIDE (scripts/skills/sync-platform.mjs 自动生成；勿手编) -->
 
-**工具速查（自动生成自 `docs/MCP-GUIDE.md` §3，toolset 2026-10-01；勿手编——更新请跑 `node scripts/skills/sync-platform.mjs`）**
+**工具速查（自动生成自 `docs/MCP-GUIDE.md` §3，toolset 2026-10-02；勿手编——更新请跑 `node scripts/skills/sync-platform.mjs`）**
 
 | 工具 | 参数 | 作用 |
 |---|---|---|
@@ -56,7 +56,7 @@ projects/<uuid>/
 | `project_shot_source` | `projectId, shotId` | `{ shot, code, contract, lyricContext, source }`：当前真实 TS 源码与完整引擎契约（ENGI… |
 | `project_shot_update` | `projectId, shotId, expectedInputRevision, patch` | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `… |
 | `project_shot_submit` | `projectId, shotId, expectedInputRevision, code` | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`addressedFeedbackIds`。生成 `vg-… |
-| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符）；首条未接受意见时冻结 `reviewBaseline`；镜头 → `needs-generation` |
+| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符），记为 `author: mcp`（代人转述时在正文注明）；首条未接受意见时冻结 `reviewBaselin… |
 | `project_transition_get` | `projectId, transitionId` | 转场节点、意见、配置、前后镜头元素方案、准确时间窗 |
 | `project_transition_update` | `projectId, transitionId, expectedInputRevision, patch` | patch 仅 `intent / locked`；新 intent → `needs-generation`，需随后 configure |
 | `project_transition_configure` | `projectId, transitionId, expectedInputRevision, config` | `config: { mode, duration ≤1.5, easing, direction }`，可带 `addressedFeedb… |

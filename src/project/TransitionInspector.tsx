@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { projectApi, type ProjectJob, type ProjectTransition, type VideoProject } from './api';
 
 export const transitionLabels = { cut: '硬切', dissolve: '溶解', wipe: '方向擦除', dip: '暗场过渡' };
-const feedbackLabels = { pending: '待响应', responded: '已响应 · 待人确认', accepted: '已接受' };
+const feedbackLabels: Record<string, string> = { pending: '待响应', 'needs-clarification': 'AI 提问 · 待你回复', responded: '已响应 · 待人确认', accepted: '已接受' };
 type Props = {
   project: VideoProject; transition: ProjectTransition; busy: boolean;
   onProject: (project: VideoProject) => void; onJob: (job: ProjectJob) => void;

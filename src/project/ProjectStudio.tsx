@@ -11,7 +11,7 @@ type ShotNode = Node<{ shot: ProjectShot; projectId: string; index: number } & R
 type TransitionNode = Node<{ transition: ProjectTransition; fromTitle: string; toTitle: string } & Record<string, unknown>, 'project-transition'>;
 type ContextNode = Node<{ title: string; detail: string; kind: string } & Record<string, unknown>, 'project-context'>;
 type FeedbackNode = Node<{ shot: ProjectShot; busy: boolean; onAdd: (text: string, revision: number) => Promise<boolean> } & Record<string, unknown>, 'project-feedback'>;
-const feedbackLabel = { pending: '待 AI 响应', responded: '已响应 · 待人确认', accepted: '已接受' };
+const feedbackLabel: Record<string, string> = { pending: '待 AI 响应', 'needs-clarification': 'AI 提问 · 待你回复', responded: '已响应 · 待人确认', accepted: '已接受' };
 const sourceLabel = (source: string) => source === 'mcp-authored' ? 'MCP 编写源码' : source === 'human-authored' ? '人工编辑源码' : '导入原工程源码';
 function FeedbackNodeView({ data }: NodeProps<FeedbackNode>) {
   const [text, setText] = useState('');

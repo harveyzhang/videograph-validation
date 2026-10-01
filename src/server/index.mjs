@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
-import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
+import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, askFeedback, replyFeedback, feedbackInbox, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
 import { startReferenceServer } from './reference-server.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 
@@ -102,7 +102,7 @@ const server = createServer(async (req, res) => {
     }
     const artifactRead = req.method === 'GET' && parts[0] === 'projects' && parts[2] === 'files';
     if (url.pathname !== '/health' && !artifactRead && req.headers.authorization !== `Bearer ${serviceToken}`) throw new ProjectError('local service authorization required', 401);
-    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v2-lyrics-transitions', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'known-BGM fingerprint cache' }); return; }
+    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v3-feedback-anchors', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'known-BGM fingerprint cache' }); return; }
     if (url.pathname === '/projects' && req.method === 'GET') { json(res, { projects: listProjects() }); return; }
     if (url.pathname === '/projects' && req.method === 'POST') {
       const input = await body(req); json(res, createProjectFromAudio(input.audioPath, input.name), 201); return;
@@ -119,6 +119,11 @@ const server = createServer(async (req, res) => {
       try { json(res, createProjectFromAudio(temporary, name.replace(/\.[^.]+$/, '')), 201); }
       finally { unlinkSync(temporary); }
       return;
+    }
+    if (url.pathname === '/feedback' && req.method === 'GET') {
+      const projectId = url.searchParams.get('projectId') ?? undefined;
+      if (projectId !== undefined && !safeId(projectId)) throw new ProjectError('invalid project id');
+      json(res, feedbackInbox({ projectId, status: url.searchParams.get('status') ?? 'open' })); return;
     }
     if (parts[0] !== 'projects' || !safeId(parts[1])) throw new ProjectError('route not found', 404);
     const id = parts[1];
@@ -137,8 +142,12 @@ const server = createServer(async (req, res) => {
     if (parts[2] === 'shots' && safeId(parts[3])) {
       if (parts[4] === 'lyrics' && req.method === 'GET') { json(res, readShotLyricContext(id, parts[3])); return; }
       if (parts[4] === 'source' && req.method === 'GET') { json(res, readShotSource(id, parts[3])); return; }
-      if (parts[4] === 'source' && req.method === 'POST') { const input = await body(req); json(res, submitShotSource(id, parts[3], input.expectedInputRevision, input.code, input.summary, input.addressedFeedbackIds, input.author)); return; }
-      if (parts[4] === 'feedback' && req.method === 'POST') { const input = await body(req); json(res, addShotFeedback(id, parts[3], input.expectedInputRevision, input.text)); return; }
+      if (parts[4] === 'source' && req.method === 'POST') { const input = await body(req); json(res, submitShotSource(id, parts[3], input.expectedInputRevision, input.code, input.summary, input.addressedFeedbackIds, input.author, input.feedbackResponses)); return; }
+      if (parts[4] === 'feedback' && parts.length === 5 && req.method === 'POST') { const input = await body(req); json(res, addShotFeedback(id, parts[3], input.expectedInputRevision, { text: input.text, anchor: input.anchor, preserve: input.preserve, author: input.author })); return; }
+      if (parts[4] === 'feedback' && safeId(parts[5]) && ['ask', 'reply'].includes(parts[6]) && req.method === 'POST') {
+        const input = await body(req);
+        json(res, parts[6] === 'ask' ? askFeedback(id, 'shot', parts[3], parts[5], input.question, input.author ?? 'mcp') : replyFeedback(id, 'shot', parts[3], parts[5], input.text, input.author ?? 'human')); return;
+      }
       if (parts[4] === 'reject-feedback' && req.method === 'POST') { const input = await body(req); json(res, rejectShotFeedback(id, parts[3], input.expectedInputRevision)); return; }
       if (parts[4] === 'accept-feedback' && req.method === 'POST') { const input = await body(req); json(res, acceptShotFeedback(id, parts[3], input.expectedInputRevision, input.feedbackIds)); return; }
       if (parts.length === 4 && req.method === 'POST') { const input = await body(req); json(res, updateShot(id, parts[3], input.expectedInputRevision, input.patch ?? {})); return; }
@@ -154,8 +163,10 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'POST') {
         const input = await body(req);
-        if (parts[4] === 'config') { json(res, configureTransition(id, transitionId, input.expectedInputRevision, input.config, input.addressedFeedbackIds, input.author)); return; }
-        if (parts[4] === 'feedback') { json(res, addShotFeedback(id, transitionId, input.expectedInputRevision, input.text, 'transition')); return; }
+        if (parts[4] === 'config') { json(res, configureTransition(id, transitionId, input.expectedInputRevision, input.config, input.addressedFeedbackIds, input.author, input.feedbackResponses)); return; }
+        if (parts[4] === 'feedback' && parts.length === 5) { json(res, addShotFeedback(id, transitionId, input.expectedInputRevision, { text: input.text, anchor: input.anchor, preserve: input.preserve, author: input.author }, 'transition')); return; }
+        if (parts[4] === 'feedback' && safeId(parts[5]) && parts[6] === 'ask') { json(res, askFeedback(id, 'transition', transitionId, parts[5], input.question, input.author ?? 'mcp')); return; }
+        if (parts[4] === 'feedback' && safeId(parts[5]) && parts[6] === 'reply') { json(res, replyFeedback(id, 'transition', transitionId, parts[5], input.text, input.author ?? 'human')); return; }
         if (parts[4] === 'accept-feedback') { json(res, acceptShotFeedback(id, transitionId, input.expectedInputRevision, input.feedbackIds, 'transition')); return; }
         if (parts[4] === 'reject-feedback') { json(res, rejectShotFeedback(id, transitionId, input.expectedInputRevision, 'transition')); return; }
         if (parts[4] === 'validate') { json(res, enqueue(id, 'validate-transition', { transitionId }), 202); return; }

@@ -1,4 +1,11 @@
-export interface ProjectFeedback { id: string; text: string; status: 'pending' | 'responded' | 'accepted'; baseInputRevision: number }
+export type FeedbackAspect = 'composition' | 'motion' | 'typography' | 'color' | 'timing' | 'lyrics' | 'other';
+export interface FeedbackAnchor { t?: number; range?: { start: number; end: number }; lyricElementId?: string; region?: { x: number; y: number; w: number; h: number }; aspect?: FeedbackAspect }
+export interface FeedbackThreadEntry { by: 'human' | 'mcp'; kind: 'question' | 'reply'; text: string; at: number }
+export interface FeedbackResponse { outcome: 'addressed' | 'partial'; how: string; by: 'human' | 'mcp'; at: number; codeHash: string }
+export interface ProjectFeedback {
+  id: string; text: string; status: 'pending' | 'needs-clarification' | 'responded' | 'accepted'; baseInputRevision: number;
+  author?: 'human' | 'mcp'; anchor?: FeedbackAnchor; preserve?: string[]; thread?: FeedbackThreadEntry[]; response?: FeedbackResponse;
+}
 export interface LyricElement { id?: string; name: string; quote: string; meaning: string; treatment: string; kind: 'entity' | 'action' | 'metaphor'; cueWord?: string; cue?: { word: string; start: number; end: number } }
 export interface LyricPlan { summary: string; elements: LyricElement[]; instrumental?: boolean; status?: string }
 export interface ShotLyricContext { lines: Array<{ lineIndex: number; text: string; start: number; end: number; words: Array<{ w: string; start: number; end: number }> }>; instrumental: boolean; rule: string }

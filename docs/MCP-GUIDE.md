@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-01 · server `videograph-pdoom` 0.1.0 · 状态：§3 为已实现工具；§6 为计划中工具，未实现前不要调用。
+toolset: 2026-10-02 · server `videograph-pdoom` 0.1.0 · 状态：§3 为已实现工具；§6 为计划中工具，未实现前不要调用。
 
 ## 1. 启动与连接
 
@@ -44,7 +44,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | 转场 transition | 相邻两镜头之间的独立节点：`intent`、`mode`(cut/dissolve/wipe/dip)、`duration`、`easing`、`direction` |
 | `inputRevision` | 每个镜头/转场各自的输入版本。所有写操作必须传 `expectedInputRevision`；不匹配返回 409，先重读再改 |
 | 镜头状态 | `imported` 参考导入待验证 → `needs-generation` 待 AI 改写 → `needs-validation` 待验证 → `ready` 已通过 5 帧抽检 |
-| 修改意见 feedback | 挂在镜头/转场上的独立记录：`pending` 待 AI 响应 → `responded` 已响应·待人确认 → `accepted` 人已采用 |
+| 修改意见 feedback | 挂在镜头/转场上的独立记录：`pending` 待 AI 响应 →（可选 `needs-clarification` AI 提问·待人回复 → `pending`）→ `responded` 已响应·待人确认 → `accepted` 人已采用。可带 `anchor`（`t / range / lyricElementId / region / aspect`）、`preserve`（必须保留项）、`thread`（澄清对话）、`response`（`outcome: addressed|partial`、`how`） |
 | `reviewBaseline` | 首条未接受意见加入时冻结的“修改前版本”，用于对比与拒绝回滚 |
 
 硬规则：
@@ -74,7 +74,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_shot_source` | `projectId, shotId` | `{ shot, code, contract, lyricContext, source }`：当前真实 TS 源码与完整引擎契约（ENGINE.md） |
 | `project_shot_update` | `projectId, shotId, expectedInputRevision, patch` | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `lyricPlan` → `needs-generation`；改 `params` → `needs-validation`；三者都会让已响应意见退回 `pending` |
 | `project_shot_submit` | `projectId, shotId, expectedInputRevision, code` | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`addressedFeedbackIds`。生成 `vg-<sha256>` 不可变模块，状态 → `needs-validation` |
-| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符）；首条未接受意见时冻结 `reviewBaseline`；镜头 → `needs-generation` |
+| `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符），记为 `author: mcp`（代人转述时在正文注明）；首条未接受意见时冻结 `reviewBaseline`；镜头 → `needs-generation` |
 
 `lyricPlan` 结构：`{ summary, elements: [{ name, quote, meaning, treatment, kind?: entity|action|metaphor, cueWord? }] }`。`quote` 必须是本镜头窗口内的真实歌词，`cueWord` 必须在该句中，否则拒绝。有歌词的镜头至少一个元素。
 
@@ -111,7 +111,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 找意见 → 读上下文 → 看画面 → 改代码 → 提交并声明响应 → 验证 → 自查 → 交给人确认
 ```
 
-1. **找到待处理意见**：`project_list` → `project_get`，筛选 `shots[].feedback` 与 `transitions[].feedback` 中 `status === 'pending'` 的条目。（FB-03 完成后改用 `project_feedback_inbox` 一次取全。）
+1. **找到待处理意见**：`project_list` → `project_get`，筛选 `shots[].feedback` 与 `transitions[].feedback` 中 `status === 'pending'` 的条目；注意读 `anchor`（定位到哪里）和 `preserve`（不能动什么）。（FB-03 完成后改用 `project_feedback_inbox` 一次取全。）
 2. **读上下文**：对目标镜头调用 `project_shot_lyrics` 与 `project_shot_source`。同时读：原始 `prompt`（不能丢的意图）、意见原文、`reviewBaseline`（修改前版本）、当前 `inputRevision`。
 3. **看画面**：先看现有 `validation.thumb`；需要动态时用 `project_preview`。不要只凭代码猜效果。
 4. **改代码**：在当前源码基础上修改，遵守引擎契约与 shotcraft 技法（见 §7）；只改意见指向的部分，意见说要保留的内容（歌词时序、Logo、镜头长度等）保持不变。
@@ -138,9 +138,10 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 
 | 名称 | 预期作用 |
 |---|---|
-| `project_feedback_inbox` | 跨镜头/转场（可跨工程）列出意见，带定位、上下文和下一步提示 |
-| 意见 `anchor` / `preserve` | 定位到具体时间点、画面区域、歌词元素；列出必须保留的内容 |
-| `feedbackResponses` | 提交时逐条说明如何响应每条意见 |
+| `project_feedback_inbox` | 跨镜头/转场（可跨工程）列出意见，带定位、上下文和下一步提示。**后端已就绪**：`GET /feedback?projectId=&status=open|pending|needs-clarification|responded|accepted` |
+| `project_feedback_ask` | AI 向人提问澄清。**后端已就绪**：`POST /projects/:id/{shots|transitions}/:tid/feedback/:fid/ask`（人回复走 `.../reply`，仅限 human） |
+| `project_shot_submit` / `project_transition_configure` 的 `feedbackResponses` | 逐条说明响应：`[{ feedbackId, outcome: addressed|partial, how }]`，partial 必须写 how。**后端已就绪**，MCP 参数待 FB-03 暴露；目前只能用 `addressedFeedbackIds` |
+| `project_feedback_add` 的 `anchor` / `preserve` | 后端已就绪（人从界面添加时使用）；MCP 参数待 FB-03 |
 | `project_stills` | 按指定时间点渲染多张静帧（当前版本或修改前版本），供 agent 看画面 |
 | `craft_guide` + MCP resources/prompts | 通过 MCP 读取 shotcraft 技法与“按意见改镜头”流程模板 |
 | `project_create_from_audio` | 任意本地音频建工程（可附歌词/LRC/语言/分析级别）；参考曲仍走指纹导入。`project_create_from_bgm` 保留为别名 |

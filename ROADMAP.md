@@ -77,13 +77,14 @@
 
 **执行顺序与依赖：** `INT-00 → FB-01 →（FB-02 ∥ FB-03 ∥ SKILL-01）→ FB-04`。FB-01 定义数据契约，其余按它开发；FB-02/FB-03/SKILL-01 文件范围不重叠，可并行。
 
-#### INT-00 收尾当前工作区（集成者，先做）
+#### ✅ INT-00 收尾当前工作区（集成者，2026-10-02 完成：commit `4035ebe`）
 
 - 现有 12 个已修改 + 4 个未跟踪文件（端口/Origin 可配、令牌在 listen 成功后写入、镜头预览按帧对齐区间、转场帧对齐、`transition-integration-audit.mjs`、`docs/THIRD-PARTY.md`、`.env.example`）。
 - 跑 `npm run build`、三组 `node --test`、`node scripts/transition-integration-audit.mjs`；通过后在 `feat/lyrics-transitions` 提交，再从它切 `feat/feedback-anchors` 等分支。
 - 验收：`git status` 干净；审计输出已记录在本节。
+- 结果：`npm run build` 通过；`node --test` 全部领域测试通过（含 ASSET-01、SKILL-01 新增测试）。**`transition-integration-audit.mjs` 未运行**：它需要独立的 5288/5291 实例与 GPU，而本机 5288/5291 正被另一会话占用，不能共写同一实例；待独立实例空闲后补跑，补跑前转场 UI 集成仍算 🚧。
 
-#### FB-01 意见数据契约与后端（独占 `src/server/feedback.mjs`（新建）、`scripts/tests/feedback/`；在 `project-store.mjs`/`index.mjs` 只做最小接线）
+#### ✅ FB-01 意见数据契约与后端（2026-10-02 完成；独占 `src/server/feedback.mjs`（新建）、`scripts/tests/feedback/`；在 `project-store.mjs`/`index.mjs` 只做最小接线）
 
 1. 新建 `feedback.mjs`，将意见校验与状态迁移从 `project-store.mjs` 抽出（行为不变，先让现有 27 项测试保持全绿）。
 2. 意见新增可选字段（旧数据缺字段仍合法，无需迁移）：
@@ -94,6 +95,9 @@
 4. 新命令 `askFeedback(projectId, targetKind, targetId, feedbackId, question)`：agent 追加 `thread` 提问，意见状态改为 `needs-clarification`（不算 pending，也不能被接受）；人回复（`replyFeedback`）后回到 `pending`。导出拦截保持“存在未接受意见即拒绝”。
 5. 新只读查询 `feedbackInbox({ projectId?, status? })`：返回每条意见的 `{ projectId, targetKind, targetId, title, window, inputRevision, locked, note, prompt, lyricPlan 摘要, baseline 是否存在, thumb, nextStep }`。`nextStep` 是给 agent 的明确下一步，例如“读源码 → 改写 → submit 带 feedbackResponses”。锁定目标标为“等待人解锁”。
 6. HTTP：`GET /feedback?projectId=&status=`、`POST .../feedback/:fid/ask`、`POST .../feedback/:fid/reply`；`POST .../feedback` 接受 `anchor/preserve`。
+- 交付：`src/server/feedback.mjs`（校验与状态迁移）；`project-store.mjs` 接线 `addShotFeedback(input 对象)`、`submitShotSource/configureTransition(..., feedbackResponses)`、`askFeedback/replyFeedback/feedbackInbox`；HTTP `GET /feedback`、`.../feedback/:fid/ask|reply`，`POST .../feedback` 接受 `anchor/preserve/author`；服务 apiVersion `project-service/v3-feedback-anchors`；前端类型 `ProjectFeedback` 扩展。
+- 实现取舍：`askFeedback` 不改输入版本、不需要 expectedInputRevision（只改意见状态，事务内完成）；已响应的意见不能再提问（避免候选与问题并存）；旧响应失效后保留最多 10 条 `responseHistory`；MCP 的 `project_feedback_add` 记为 `author: mcp`。MCP 侧新参数/新工具留给 FB-03。
+- 已运行：`scripts/tests/feedback/feedback-contract.test.mjs`（8 项）+ `feedback-http.test.mjs`（独立端口与临时目录的真实服务冒烟）通过；原有 27 项领域测试不变通过；`npm run build` 通过。
 - 测试（不启服务）：锚点越界拒绝；lyricElementId 失效拒绝；partial 响应可见但需人接受；提问→回复→响应→接受全流程；旧格式意见与旧参数提交仍可用；inbox 不泄露服务令牌/本机绝对路径。
 
 #### FB-02 人的意见输入与对比界面（独占 `src/project/FeedbackComposer.tsx`、`src/project/ReviewCompare.tsx`（新建）及其样式；`ProjectStudio.tsx` 只做替换接线，由集成者合并）
@@ -500,7 +504,8 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | QA-01 人与 AI 操作检查 | ✅ ZCode 会话认领（2026-09-30，用户指派），第一切片已交付 | 新目录 `scripts/tests/collaboration/`、独立测试夹具 | 反馈生命周期多步序列：拒绝→重新响应→接受、重复拒绝恢复一致、human/mcp 来源组合；服务级与权限测试留待后续切片；不能改产品实现来让测试变绿 |
 | FEEDBACK-02 人工反馈闭环收尾 | ✅ ZCode 会话认领（2026-09-30，用户指派），后端完成 | `src/server/project-store.mjs` 反馈/接受/拒绝语义、`scripts/project-store-test.mjs` | 拒绝候选按快照键完整恢复、不残留候选字段（shots 与 transitions 共用）；提交只标记明确响应的意见。`ProjectStudio.tsx` 源码弹窗勾选 UI 在集成者手中，交接要点：按 shot.feedback 渲染 pending 意见复选框，仅提交勾选项，勿自动全选 |
 | SKILL-01 shotcraft 纳入仓库 | ✅ ZCode 会话认领（2026-10-01）：已写代码+已运行验证，分支 feat/skill-shotcraft | skills/shotcraft/、scripts/skills/、scripts/tests/docs/（已交付）；MCP resources/craft_guide/respond_to_feedback 注册提给集成者 | 内容为原创蒸馏，许可归档见 skills/shotcraft/SOURCES.md（8 无许可仓库仅思路级、StuGRua 按受限处理）；分发用 scripts/skills/install.mjs；工具速查表由 sync-platform.mjs 从 MCP-GUIDE 生成，mcp-guide-sync 测试兜底（1 项占位等集成者注册后启用） |
-| INT-00 / FB-01 / FB-02 / FB-03 / FB-04 | ⬜ 待认领（2026-10-01 规划），详见第三节“当前冲刺”（SKILL-01 已由 ZCode 会话认领） | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
+| INT-00 / FB-01 | ✅ 集成者（本会话）2026-10-02 完成，已合并 main | `src/server/feedback.mjs`、`scripts/tests/feedback/` | 见第三节 |
+| FB-02 / FB-03 / FB-04 | ⬜ 待认领；FB-01 契约已在 main，可直接开工，详见第三节“当前冲刺” | 各包在第三节写明独占文件 | 认领时在此行拆分登记负责人与分支；热点文件只交集成者合并 |
 | SONG-00 ～ SONG-06 任意歌曲拆解 | ⬜ 待认领（2026-10-01 规划），详见第三节“并行冲刺 SONG” | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/` | SONG-00/01 可与反馈冲刺并行；下载模型/建 Python 环境前须用户确认 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 
@@ -533,7 +538,8 @@ ASSET-01 的面板和路由先从自己的目录导出；集成者在热点文�
 ### Git 与运行环境
 
 - 产品目录已建立独立 Git 仓库；参考仓库在边界外。依赖、缓存、令牌、数据库、BGM 与成片已由 `.gitignore` 排除。
-- **基线已建立并推送（2026-09-30，用户指令）：commit `3c8243a` → github.com/G1en-114/videograph-validation main。** 之后的功能改动按工作包登记范围进行；不要把未登记的混合工作区当作可合并基线。
+- **基线已建立并推送（2026-09-30，用户指令）：commit `3c8243a` → github.com/G1en-114/videograph-validation main。**
+- **2026-10-02 集成合并（用户指令）**：main 快进合并 `feat/brand-assets`（ASSET-01）→ `feat/skill-shotcraft`（SKILL-01）→ INT-00 → FB-01，历史线性无冲突；合并后构建与全部领域测试通过。 之后的功能改动按工作包登记范围进行；不要把未登记的混合工作区当作可合并基线。
 - 基线形成后，每人使用独立 clone 或独立工作副本和独立功能分支：`feat/lyrics-transitions`、`feat/brand-assets`、`test/collaboration`。不共享同一工作目录来回切分支。
 - 同机并行时使用不同端口、独立 `.cache/`、`.queue/` 和 `projects/`；不得让两个开发服务同时写同一份工程数据库/服务令牌。前端 service URL、后端允许的 Origin 与 MCP service URL 必须对应同一套实例。
 - 当前默认实例是前端 5188、后端 5191；同事建议预留前端 5288、后端 5291。隔离配置还需在代码中接通后验收，未接通前应使用不同机器或只运行一套服务。

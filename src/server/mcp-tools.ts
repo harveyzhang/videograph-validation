@@ -40,11 +40,11 @@ export async function callProjectTool(name: string, args: Record<string, unknown
   else if (name === 'project_shot_source') path += `/shots/${shotId}/source`;
   else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch }; }
   else if (name === 'project_shot_submit') { path += `/shots/${shotId}/source`; body = { expectedInputRevision: args.expectedInputRevision, code: args.code, summary: args.summary, addressedFeedbackIds: args.addressedFeedbackIds, author: 'mcp' }; }
-  else if (name === 'project_feedback_add') { path += `/shots/${shotId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text }; }
+  else if (name === 'project_feedback_add') { path += `/shots/${shotId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text, author: 'mcp' }; }
   else if (name === 'project_transition_get') path += `/transitions/${transitionId}`;
   else if (name === 'project_transition_update') { path += `/transitions/${transitionId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch }; }
   else if (name === 'project_transition_configure') { path += `/transitions/${transitionId}/config`; body = { expectedInputRevision: args.expectedInputRevision, config: args.config, addressedFeedbackIds: args.addressedFeedbackIds, author: 'mcp' }; }
-  else if (name === 'project_transition_feedback_add') { path += `/transitions/${transitionId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text }; }
+  else if (name === 'project_transition_feedback_add') { path += `/transitions/${transitionId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text, author: 'mcp' }; }
   else if (name === 'project_transition_validate') { path += `/transitions/${transitionId}/validate`; body = {}; }
   else if (name === 'project_preview') { path += '/preview'; body = { shotId: args.shotId, transitionId: args.transitionId, version: args.version }; }
   else if (name === 'project_validate') { path += '/validate'; body = { shotId: args.shotId }; }
