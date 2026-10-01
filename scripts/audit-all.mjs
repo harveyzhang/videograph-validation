@@ -15,7 +15,11 @@ const { token } = await session.json();
 const listing = await fetch(`${serviceUrl}/projects`, { headers: { authorization: `Bearer ${token}` } });
 if (!listing.ok) throw new Error(`工程列表读取失败（${listing.status}）`);
 const { projects } = await listing.json();
-const projectId = process.env.VIDEOGRAPH_AUDIT_PROJECT ?? projects[0]?.id;
+// 目标选择：显式 env > ROADMAP §二 点名的参考复现工程（稳定验收夹具）> 第一个工程。
+// 不能默认拿"第一个"：它可能是并行会话正在改写的活跃工作区（needs-generation 会让预览按钮禁用）。
+const referenceId = '62a1d69e-14a4-4012-984b-d6a18a62a58f';
+const projectId = process.env.VIDEOGRAPH_AUDIT_PROJECT
+  ?? (projects.some((p) => p.id === referenceId) ? referenceId : projects[0]?.id);
 if (!projectId) throw new Error('服务中没有任何工程；先用界面或 MCP 建工程后再跑审计');
 
 console.log(`project-view-audit → ${projectId}`);
