@@ -5,6 +5,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { renderShotsWithTransitions } from './transitions.mjs';
+import { FX_COMMON, hexToVec3, resolveParams } from '../fx/runtime.mjs';
 
 const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -35,7 +36,8 @@ export async function startReferenceServer({ root = resolve(productRoot, '../pdo
     plugins: [{
       name: 'videograph-reference-assets',
       resolveId(id) { if (id === 'virtual:videograph-transitions') return '\0videograph-transitions'; },
-      load(id) { if (id === '\0videograph-transitions') return readFileSync(new URL('./transition-runtime.mjs', import.meta.url), 'utf8'); },
+      // 特效箱宿主所需的着色器公共库与参数解析，直接取自 src/fx/runtime.mjs（与特效箱预览同一份实现）。
+      load(id) { if (id === '\0videograph-transitions') return `const FX_COMMON = ${JSON.stringify(FX_COMMON)};\n${hexToVec3.toString()}\n${resolveParams.toString()}\n${readFileSync(new URL('./transition-runtime.mjs', import.meta.url), 'utf8')}`; },
       transformIndexHtml() {
         return [{ tag: 'link', attrs: { rel: 'icon', type: 'image/svg+xml', href: `/@fs/${normalizePath(join(productRoot, 'public/favicon.svg'))}` }, injectTo: 'head' }];
       },
@@ -60,7 +62,7 @@ export async function startReferenceServer({ root = resolve(productRoot, '../pdo
           return `${patched}\n;(function () {\n  if (window.top === window) return;\n  setInterval(() => {\n    try {\n      const hook = window.__videographTime;\n      const info = document.getElementById('info');\n      const parsed = info ? Number.parseFloat(info.textContent ?? '') : NaN;\n      const t = typeof hook === 'function' ? Number(hook()) : parsed;\n      if (Number.isFinite(t)) parent.postMessage({ type: 'videograph:time', t }, '*');\n    } catch (error) { /* 时间广播失败不影响播放器自身 */ }\n  }, 250);\n})();\n`;
         }
         if (!renderShots || !normalizePath(id).endsWith('/src/timeline.ts')) return;
-        const imports = `import { wrapTransitionScene } from 'virtual:videograph-transitions';\n` + renderShots.map((shot, index) => `const vgLoad${index} = async () => { const mod = await import('/src/scenes/${shot.module ?? '_window-template'}.ts'); return {default: wrapTransitionScene(mod.default, ${JSON.stringify({ start: shot.start, end: shot.end, logicalStart: shot.logicalStart, logicalEnd: shot.logicalEnd, incomingTransition: shot.incomingTransition })}, ${fps})}; };`).join('\n');
+        const imports = `import { wrapTransitionScene } from 'virtual:videograph-transitions';\n` + renderShots.map((shot, index) => `const vgLoad${index} = async () => { const mod = await import('/src/scenes/${shot.module ?? '_window-template'}.ts'); return {default: wrapTransitionScene(mod.default, ${JSON.stringify({ start: shot.start, end: shot.end, logicalStart: shot.logicalStart, logicalEnd: shot.logicalEnd, incomingTransition: shot.incomingTransition, effects: (shot.effects ?? []).map(({ id, glsl, params, bindings, specs, declaresUniforms }) => ({ id, glsl, params, bindings, specs, declaresUniforms })) })}, ${fps})}; };`).join('\n');
         return `${code.replace('export function makeTimeline(', 'function referenceTimeline(')}\n${imports}\nexport function makeTimeline(ly, au) {\n const original = referenceTimeline(ly, au);\n return [${renderShots.map((shot, index) => `({...original.find(e=>e.id===${JSON.stringify(shot.id)}), ...${JSON.stringify({ id: shot.id, start: shot.start, end: shot.end, params: shot.params ?? {}, post: shot.post ?? {} })}, load: vgLoad${index}})`).join(',')}];\n}`;
       },
     }],

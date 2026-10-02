@@ -1,7 +1,9 @@
 // transitions.mjs — 以切点后的短区间做过渡，不改变总时长、不提前显示下一句歌词。
 import { createHash } from 'node:crypto';
 import { ProjectError } from './errors.mjs';
-export const transitionModes = ['cut', 'dissolve', 'wipe', 'dip'];
+import { prepareTransitionEffect } from './fx/apply.mjs';
+// effect：特效箱里的转场动效（gl-transitions 等），代码与参数冻结在 transition.effect。
+export const transitionModes = ['cut', 'dissolve', 'wipe', 'dip', 'effect'];
 export function defaultTransitions(shots) {
   return shots.slice(1).map((right, index) => {
     const left = shots[index];
@@ -30,11 +32,14 @@ export function transitionPair(project, transition) {
   if (Math.abs(left.end - right.start) > 0.002) throw new ProjectError('首版转场要求相邻镜头共享同一切点');
   return { left, right };
 }
-export function validateTransitionConfig(project, transition, config) {
+/** frozenEffect：渲染路径复核已冻结的转场时传入，跳过重新查找特效箱（冻结后不受特效箱更新影响）。 */
+export function validateTransitionConfig(project, transition, config, { frozenEffect } = {}) {
   const { right } = transitionPair(project, transition);
-  if (!config || typeof config !== 'object' || Array.isArray(config) || Object.keys(config).some((key) => !['mode', 'duration', 'easing', 'direction'].includes(key))) throw new ProjectError('unsupported transition config');
+  if (!config || typeof config !== 'object' || Array.isArray(config) || Object.keys(config).some((key) => !['mode', 'duration', 'easing', 'direction', 'effectId', 'params'].includes(key))) throw new ProjectError('unsupported transition config');
   const mode = config.mode ?? transition.mode;
-  if (!transitionModes.includes(mode)) throw new ProjectError('转场类型仅支持 cut/dissolve/wipe/dip');
+  if (!transitionModes.includes(mode)) throw new ProjectError('转场类型仅支持 cut/dissolve/wipe/dip/effect');
+  if (mode !== 'effect' && (config.effectId !== undefined || config.params !== undefined)) throw new ProjectError('effectId/params 只用于 mode=effect');
+  const effect = mode !== 'effect' ? null : frozenEffect ?? prepareTransitionEffect(config.effectId ?? transition.effect?.id, config.params ?? (config.effectId ? undefined : transition.effect?.params));
   const maxDuration = Math.min(1.5, (right.end - right.start) / 2);
   const duration = mode === 'cut' ? 0 : config.duration ?? (transition.duration > 0 ? transition.duration : Math.min(.25, maxDuration));
   if (!Number.isFinite(duration) || duration < 0 || (mode !== 'cut' && (duration < 1 / (project.output?.fps ?? 30) || duration > maxDuration))) throw new ProjectError(`转场时长必须在一帧到 ${maxDuration.toFixed(3)} 秒之间`);
@@ -42,7 +47,7 @@ export function validateTransitionConfig(project, transition, config) {
   const easing = config.easing ?? transition.easing ?? 'smooth';
   const direction = config.direction ?? transition.direction ?? 'left';
   if (!['linear', 'smooth'].includes(easing) || !['left', 'right'].includes(direction)) throw new ProjectError('invalid transition easing/direction');
-  return { mode, duration, easing, direction };
+  return { mode, duration, easing, direction, ...(effect ? { effect } : {}) };
 }
 export function transitionWindow(project, transition, fps = project.output?.fps ?? 30) {
   const { left, right } = transitionPair(project, transition);
@@ -59,7 +64,9 @@ export function renderShotsWithTransitions(shots, transitions = [], fps = 30) {
   const rendered = aligned.map((shot) => ({ ...shot, logicalStart: shot.start, logicalEnd: shot.end }));
   for (const transition of transitions) {
     if (transition.mode === 'cut') continue;
-    validateTransitionConfig(project, transition, transitionConfig(transition));
+    const { effect: frozenEffect, ...base } = transitionConfig(transition);
+    if (base.mode === 'effect' && !frozenEffect) throw new ProjectError(`${transition.id} 的转场动效缺少冻结代码`);
+    validateTransitionConfig(project, transition, base, { frozenEffect });
     const window = transitionWindow(project, transition, fps);
     const left = rendered.find((shot) => shot.id === transition.fromShotId);
     const right = rendered.find((shot) => shot.id === transition.toShotId);
@@ -68,4 +75,4 @@ export function renderShotsWithTransitions(shots, transitions = [], fps = 30) {
   }
   return rendered;
 }
-export const transitionConfig = ({ mode, duration, easing, direction }) => ({ mode, duration, easing, direction });
+export const transitionConfig = ({ mode, duration, easing, direction, effect }) => ({ mode, duration, easing, direction, ...(mode === 'effect' && effect ? { effect } : {}) });

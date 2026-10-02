@@ -22,7 +22,7 @@ import { fxToolDefinitions, fxToolNames, callFxTool } from '../server/mcp-fx-too
 
 const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 const server = new Server(
-  { name: 'videograph', version: '0.5.0' },
+  { name: 'videograph', version: '0.6.0' },
   { capabilities: { tools: {}, resources: {}, prompts: {} } },
 );
 

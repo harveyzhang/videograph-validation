@@ -209,6 +209,16 @@
     - 测试：`scripts/tests/fx/fetcher.test.mjs`（8 项：选择规则、逐文件许可、子目录覆盖、篡改拒绝、路径/主机限制、缓存不再联网、规则放宽后复判）+ `fx-mcp.test.mjs`（3 项离线 stdio）；全量 151/151，`npm run build` ✓。
     - 未做（FX-00 剩余）：动效包 manifest/provenance JSON Schema、导出 CREDITS 自动汇总。
   - **提示词/知识库来源（2026-10-02 用户追加 12 个仓库，已运行验证）**：逐个核查许可——可下载 8 个：yihui-dev（MIT）、athemeroy/awesome-claude-5-5-videos（原 awesome-opus-5-5-videos，CC BY 4.0）、chuspeeism（MIT，仅覆盖其目录文字与代码）、TripoGrowthLab（MIT，Scope 不含第三方提示词）、BeatAPI（文档 CC BY 4.0 + 代码 MIT）、lemomo-ai/lemo-opuscar（MIT，43 种风格提示词为其自有）、X-RayLuan（MIT，收录创作者原文提示词）、Li-Evan（CC BY 4.0）；只登记链接 4 个（无许可证）：opusvideo/awesome-claude-video、joeseesun/opus-video-prompts、zhuyansen/awesome-opus-5.5-video、0xpratzyy/specimen-and-signal。各清单引用的他人提示词权利归原作者，只作参考并注明来源。只下载文本（md/txt/json/yaml/csv），排除视频/图片/音频；新 MCP 工具 `fx_library_search / fx_library_read`（不指定来源只搜已下载库；按需下载有 40 秒时限可续传）。本机已预下载 8 库约 2,090 个文件（85 秒），全库检索 0.3 秒。测试 `scripts/tests/fx/library.test.mjs`（5 项）+ fx-mcp 真实 stdio 调用。
+  - **FX-01/02 特效箱 ✅（2026-10-02，集成者，已运行验证；用户要求：样例由其他 agent 批量编写，集成者交付框架 + 1 个带完整注释的样板）**：
+    - 格式：`effects/box/<id>.glsl` 一个文件一个动效（头部 JSON manifest + `effect(uv)`/`transition(uv)`），便于多 agent 并行不冲突；`src/fx/box/index.mjs` 解析/校验/检索，`src/server/fx/effects.mjs` 加载目录并合并 gl-transitions（适配器解析 uniform 默认值、把 GLSL ES 3.00 不允许的全局非常量初始化改写为 `#define`）。
+    - 运行时：`src/fx/runtime.mjs`（WebGL2 预览、演示素材、节拍时钟、参数+节拍绑定解析）；引擎宿主在 `transition-runtime.mjs`（镜头后期栈乒乓 RT、转场 mode=effect；显示/线性空间编解码），公共库由 reference-server 从 runtime.mjs 注入——预览、校验、导出同一份实现。
+    - 工程：`shot.effects`（≤4 层，`updateShot` 补丁，版本/导演回执/锁定照常）、`transition.mode='effect'`；代码与参数冻结进工程；渲染缓存键含动效。
+    - MCP：`effect_search / effect_get / effect_preview（返回帧序列图）/ project_shot_effects`，`project_transition_configure` 支持 `mode:effect`；server 0.6.0。
+    - 审阅室“特效箱”标签：检索/分类/卡片实时缩略图/详情动画预览（演示素材、拍速、参数滑块、代码）/“建议 AI 使用”（写成当前镜头意见）；检查器显示已套用特效。
+    - 脚本：`scripts/fx/check-box.mjs`（结构→编译→渲染合理性→与原图差异→闪烁上限）、`scripts/fx/render-examples.mjs`（帧序列 + 总览）、`scripts/fx/engine-e2e.mjs`（独立实例真实引擎：套用后期栈与转场动效 → 静帧 → 验证）。
+    - 内容：38 个原创动效（印刷与版画 8、手绘与绘画 6、复古与数字 10、胶片与调色 8、运动与节拍 6），样板 `riso-two-ink.glsl` 带完整编写规范注释；gl-transitions 123/125 可用（2 个需额外贴图）。闸门 161/161 通过（首轮发现：10 个 gl-transitions 编译失败已由改写修复、lens-aberration 默认值过弱已调）。编写指南与给 agent 的提示词：`docs/FX-AUTHORING.md`（含 8 批分工建议）。
+    - 实测：参考工程独立实例套用 Risograph + 拍点推镜，真实引擎静帧与 5 帧验证通过；gl-directionalwarp 转场帧序列正确。**顺带修复既有 bug**：转场目标的静帧（FB-03 起）没有显式加载出镜侧镜头，出镜画面渲染错误（内置 dissolve 同样受影响）；已修并让旧缓存失效（stills-v2）。
+    - 测试 166/166，`npm run build` ✓，ui-feedback 浏览器验收 ✓。
 - **FX-01 运行时**：引擎内动效宿主——每镜头后期链（复用 `gl.ts` 的 `FSPass/makeRT`）、转场节点新增 `mode: effect`（gl-transitions 接口）、参数 schema 校验、节拍绑定（参数 = 基础值 + 强度 × 脉冲(beatPhase/kick/词起点)）；缓存键含动效包 hash。验收：同输入逐像素一致；改动效参数只让该镜头/该转场缓存失效。
 - **FX-02 首批 30 个**：15 转场（gl-transitions）、10 后期（postprocessing/three examples/glfx）、5 第一方（pdoom 引擎）。每个自动出预览图并过确定性测试；`effects/CREDITS.md` 齐全。
 - **FX-03 MCP 与审阅室**：`effect_search / effect_get（含预览图）/ effect_apply / effect_update / effect_remove`；`effect_apply` 走版本检查并让目标进入待验证；前端在镜头/转场上显示动效栈（只读，可对单个动效提意见）。MCP-GUIDE 同步。

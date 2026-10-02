@@ -14,6 +14,10 @@ const value = await picker.evaluate((select, name) => [...select.options].find((
 if (value) { await picker.selectOption(value); await page.waitForTimeout(3500); }
 const shot = process.env.UI_SHOT_SELECT;
 if (shot) { await page.locator('.project-shot-list button', { hasText: shot }).first().click(); await page.waitForTimeout(1500); }
+const tab = process.env.UI_SHOT_TAB;
+if (tab) { await page.getByRole('button', { name: tab, exact: true }).click(); await page.waitForTimeout(4000); }
+const card = process.env.UI_SHOT_CARD;
+if (card) { await page.getByRole('button', { name: '预览 ' + card }).click(); await page.waitForTimeout(2500); }
 await page.screenshot({ path: out });
 console.log(JSON.stringify({ out, errors }));
 await browser.close();

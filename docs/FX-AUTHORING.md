@@ -1,0 +1,79 @@
+# 特效箱动效编写指南（给批量编写的 agent）
+
+> 样板：`effects/box/riso-two-ink.glsl`——**先完整读一遍它的注释**，它就是规范。本文件只补充流程、验收和分工。
+> 计划与进度见 ROADMAP「FX 冲刺」；MCP 使用见 `docs/MCP-GUIDE.md`。
+
+## 1. 交付物
+
+- 每个动效一个文件：`effects/box/<id>.glsl`，`id` = 文件名，小写字母数字和连字符，**不得与已有文件重名**（先 `ls effects/box`）。
+- 头部 `/*@effect {JSON} @effect*/` + 正文 `vec4 effect(vec2 uv)`（镜头后期）或 `vec4 transition(vec2 uv)`（转场，gl-transitions 接口：`getFromColor/getToColor/progress/ratio`）。
+- 不改其他任何文件（运行时、宿主、索引都会自动加载新文件）。
+
+## 2. 验收（交付前必须自己跑完）
+
+```sh
+node scripts/fx/check-box.mjs --only <你的id1>,<你的id2>     # 结构 → 编译 → 渲染合理性 → 闪烁上限，全部 ✓
+node scripts/fx/render-examples.mjs --only <id1>,<id2>        # 生成 .cache/fx-examples/<id>.png
+```
+
+- **逐张打开 `.cache/fx-examples/<id>.png` 看**：默认参数是否好看、风格是否一眼可辨、节拍绑定在“●鼓点”帧是否可见、有没有糊/噪/偏色。不好看就改，不要只看 ✓。
+- 可换演示素材复查：`--source type|scene|shapes|portrait`（文字海报 / 风景 / 几何 / 人像剪影）。
+- 界面里也能看：审阅室 → 特效箱 → 点卡片，实时动画 + 调参。
+
+## 3. 质量标准
+
+1. 风格可辨：同类别里不能和已有动效几乎一样（先在特效箱里搜一下）。
+2. 模拟过程：说清楚这个风格在现实里是怎么产生的（颜料沉积、网点、扫描线、胶片化学……），每一步对应代码里的一段，并用中文注释写出来（参照样板的①②③）。
+3. 至少一个参数有意义地挂到节拍（`bindings`），除非这个风格本质上是静态的（在 `avoid` 或注释里说明为什么不挂）。
+4. 默认参数即可用；参数 3–6 个，名字和 label 让人一看就懂；float 必须有 min/max。
+5. 安全与成本：无全屏高频闪烁；每像素采样 ≲16 次；不依赖帧间状态。
+6. 文案：`summary` 一句话说清看起来什么样；`when` 写适用的镜头/情绪/题材；`avoid` 写会翻车的情况。
+
+## 4. 许可（硬规则）
+
+- 代码必须是你自己写的。可以用 MCP 工具找灵感：`fx_library_search`（提示词库）、`casebook_search`（案例库）、`craft_guide`（技法库）。
+- 参考了谁就写进 `inspiredBy`（来源 id + ref + note），`provenance` 写“本项目原创实现”。
+- **不得复制**：无许可证的仓库（`fx_sources` 里 `downloadable:false` 的）、Shadertoy（默认 CC BY-NC-SA）、任何 NC/需商业授权的代码。确需移植 MIT/Apache 等许可的代码，`license/author/provenance` 写明原作者与许可，并在交付说明里单独列出。
+- 不要重复实现 gl-transitions 已有的转场（特效箱里搜 `gl-` 可见 123 个）。
+
+## 5. 给 agent 的提示词（复制后把【】里的内容换掉）
+
+```
+你在 VideoGraph 仓库（F:\aicg\video-graph-demo）里为“特效箱”批量编写动效。特效箱相当于 LLM 用的 After Effects“效果和预设”，你写的每个动效都会被别的 AI 检索、预览并套用到真实视频镜头上。
+
+先做这三件事再动手：
+1. 完整阅读样板 effects/box/riso-two-ink.glsl（注释就是规范）和 docs/FX-AUTHORING.md。
+2. 运行 ls effects/box，确认已有的 id，不要重名、不要做几乎一样的效果。
+3. 如果你能用 videograph MCP：用 fx_library_search / casebook_search 搜你要做的风格，看别人怎么描述它；只取思路，代码自己写。
+
+本批任务：类别「【类别名】」，编写以下 【N】 个镜头后期动效（kind=post）：
+【1. 名称：一句话说明】
+【2. ……】
+
+要求：
+- 每个动效一个文件 effects/box/<id>.glsl，头部 manifest + vec4 effect(vec2 uv)，只新增文件，不改别的文件。
+- 用中文注释按“现实中这个风格怎么产生的”分步骤写（①②③…），每步对应代码。
+- 至少一个参数挂到节拍（bindings），除非风格本质静态（在注释里说明）。
+- GLSL ES 3.00：浮点写 1. 不写 1；全局变量不能用非常量初始化；循环次数用常量；自定义函数不要用 fx 前缀。
+- 输入用 srcTex(uv)（显示空间 0..1），像素尺度乘 uRes，随机用 fxHash，禁止全屏高频闪烁，每像素采样 ≤16 次。
+
+交付前必须：
+1. node scripts/fx/check-box.mjs --only <你的所有id，逗号分隔>  → 全部 ✓
+2. node scripts/fx/render-examples.mjs --only <同上>  → 逐张打开 .cache/fx-examples/<id>.png 看效果；不好看就改参数或算法，直到默认参数本身就好看、风格一眼可辨、鼓点帧能看出节拍反应。
+3. 回复：每个 id 一行（名称、一句话、用了哪些节拍绑定、灵感来源），以及 check-box 的最终输出。不要回复“已完成”而不附检查结果。
+```
+
+## 6. 建议分工（每批交给一个 agent，类别互不重叠）
+
+| 批次 | 类别 | 建议的动效（agent 可增删，避免与已有重复） |
+|---|---|---|
+| A | 印刷与版画 | 丝网印刷错版海报、凸版油墨压印、石版画、复写纸/蓝图复印、旧报纸油墨洇开、刮刮画 |
+| B | 手绘与绘画 | 炭笔素描、彩铅交叉排线、粉彩、马克笔、水粉平涂、点彩、浮世绘、剪纸拼贴、黑板粉笔 |
+| C | 复古与数字 | 老电视换台雪花、LCD 子像素、数据弯曲、扫描仪拖影、低码率压缩块、8 位抖动调色板、示波器矢量 |
+| D | 胶片与调色 | 宝丽来、交叉冲印、漂白跳过、红外胶片、柯达式暖调、彩色负片反相、褪色电影拷贝 |
+| E | 运动与节拍 | 拍点频闪描边（限频）、节拍网格脉冲、低频呼吸缩放、拍点切换调色板、鼓点涟漪扭曲、拍点像素爆散 |
+| F | 光效与粒子 | 体积光、镜头光晕、霓虹管闪烁、光斑散景、星芒、尘埃光束、全息扫描 |
+| G | 几何与图形 | 三角化、Voronoi 碎片、等高线、六边形马赛克、线框化、点阵化、条纹位移 |
+| H | 转场（kind=transition） | 墨水晕开、纸张撕裂、胶片烧穿、像素溶解按亮度、节拍百叶窗、镜头推拉模糊（与 gl-transitions 不重复） |
+
+已有的 38 个（含样板）都在 `effects/box/`，可作为更多参考，也可以按需删除或重写。

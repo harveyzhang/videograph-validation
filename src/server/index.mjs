@@ -11,6 +11,7 @@ import { feedbackTargetWindow } from './feedback.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 import { startAnalysisWorker } from './analysis-jobs.mjs';
 import { cueSheet } from './rhythm.mjs';
+import { allEffects } from './fx/effects.mjs';
 import { getDirector, submitDirector, claimDirector, completeDirector, submitReview, acceptDirectorReview, dispatchDirector, assertDirectorExport } from './director.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
@@ -234,6 +235,11 @@ const server = createServer(async (req, res) => {
       try { json(res, createProjectFromAudio(temporary, name.replace(/\.[^.]+$/, '')), 201); }
       finally { unlinkSync(temporary); }
       return;
+    }
+    if (url.pathname === '/fx/effects' && req.method === 'GET') {
+      // 特效箱（审阅室 UI 用）：本仓库动效 + 本机已下载的 gl-transitions；含着色器代码，前端直接在浏览器里实时预览。
+      const { effects, problems, glTransitions } = await allEffects();
+      json(res, { effects: effects.filter((effect) => !effect.unsupported), problems, glTransitions }); return;
     }
     if (url.pathname === '/feedback' && req.method === 'GET') {
       const projectId = url.searchParams.get('projectId') ?? undefined;

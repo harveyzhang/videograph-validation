@@ -29,6 +29,7 @@ export interface ProjectShot {
   locked: boolean;
   feedback?: ProjectFeedback[];
   lyricPlan?: LyricPlan;
+  effects?: Array<{ id: string; name: string; params: Record<string, unknown>; kind: string }>;
   reviewBaseline?: { module: string; validation?: { thumb: string } };
   validation?: { samples: number; thumb: string; checkedAt: number };
 }

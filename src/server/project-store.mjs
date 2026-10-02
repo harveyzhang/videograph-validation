@@ -12,6 +12,7 @@ import { createSongProject } from './song-project.mjs';
 import { prepareFeedbackInput, createNote, invalidateResponses, prepareResponses, applyResponses, askOnNote, replyOnNote, inboxItems, feedbackTargetWindow, lyricElementIds } from './feedback.mjs';
 import { assertSceneLint } from '../song/scene-lint.mjs';
 import { trackDirectorCommit, receiptDirectorCommit } from './director-commit.mjs';
+import { prepareShotEffects } from './fx/apply.mjs';
 export { ProjectError } from './errors.mjs';
 
 export const productRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -163,7 +164,7 @@ function restoreSnapshot(target, snapshot) {
 }
 
 export function updateShot(id, shotId, expectedInputRevision, patch, attemptToken, author = 'human') {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some((key) => !['title', 'prompt', 'params', 'lyricPlan', 'locked'].includes(key))) throw new ProjectError('unsupported shot patch');
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some((key) => !['title', 'prompt', 'params', 'lyricPlan', 'locked', 'effects'].includes(key))) throw new ProjectError('unsupported shot patch');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
     const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken, author);
@@ -183,6 +184,12 @@ export function updateShot(id, shotId, expectedInputRevision, patch, attemptToke
       shot.params = patch.params;
       if (shot.status !== 'needs-generation') shot.status = 'needs-validation';
     }
+    if (patch.effects !== undefined) {
+      // 特效箱后期栈：冻结着色器与参数进工程；改变画面但不改源码 → 待验证。
+      shot.effects = prepareShotEffects(patch.effects);
+      if (!shot.effects.length) delete shot.effects;
+      if (shot.status !== 'needs-generation') shot.status = 'needs-validation';
+    }
     if (patch.lyricPlan !== undefined) {
       shot.lyricPlan = prepareLyricPlan(project, shot, patch.lyricPlan);
       shot.status = 'needs-generation';
@@ -191,7 +198,7 @@ export function updateShot(id, shotId, expectedInputRevision, patch, attemptToke
       if (typeof patch.locked !== 'boolean') throw new ProjectError('locked must be boolean');
       shot.locked = patch.locked;
     }
-    if (edits.some((key) => key === 'prompt' || key === 'params' || key === 'lyricPlan')) {
+    if (edits.some((key) => key === 'prompt' || key === 'params' || key === 'lyricPlan' || key === 'effects')) {
       invalidateResponses(shot);
       shot.inputRevision++; shot.inputToken = randomUUID(); delete shot.validation;
     }
@@ -325,6 +332,7 @@ export function configureTransition(id, transitionId, expectedInputRevision, con
     const checked = validateTransitionConfig(project, transition, config);
     transition.previousVersion = versionSnapshot(transition);
     Object.assign(transition, checked);
+    if (checked.mode !== 'effect') delete transition.effect; // 改回内置转场时清掉冻结的转场动效
     transition.inputRevision++; transition.inputToken = randomUUID(); transition.status = 'needs-validation';
     transition.source = `${author}-configured`; transition.codeHash = sha256(JSON.stringify(transitionConfig(transition)));
     invalidateResponses(transition);

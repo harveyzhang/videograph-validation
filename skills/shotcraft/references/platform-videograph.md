@@ -87,6 +87,10 @@ projects/<uuid>/
 | `project_contact_sheet` | `projectId` | 全片每镜头 1–3 帧（`ratios`，默认 `[0.45]`）拼图，标序号/标题/时间/段落/状态；无源码镜头画占位。看全片一致性、色彩推… |
 | `project_rhythm_report` | `projectId` | 顺序渲染目标时间段（范围参数同 filmstrip；`sampleFps` 10–60，默认 ≤30 秒用工程帧率、更长用 15），返回文本报… |
 | `craft_guide` | — | shotcraft 技法库节选（≤12k 字符）。`topic`：`shots / transitions / effects / media… |
+| `effect_search` | — | 按风格/用途关键词（risograph、水彩、卡点、glitch、胶片…）、`kind`（`post` 镜头后期 | `transition`… |
+| `effect_get` | `id` | 完整定义：参数规格、节拍绑定、来源与许可、着色器代码、可直接复制的套用调用示例 |
+| `effect_preview` | `id` | 在演示素材（`source`: type 文字海报 / scene 风景 / shapes 几何 / portrait 人像剪影）上渲染 4–… |
+| `project_shot_effects` | `projectId, shotId, expectedInputRevision, effects` | 设置镜头后期栈：`[{ id, params?, bindings? }]`，按顺序叠加、最多 4 层、空数组清除；只接受 kind=post… |
 | `fx_sources` | — | 登记的来源：仓库、commit、许可状态、署名、第三方素材说明、本机缓存数 |
 | `casebook_list` | — | Code Video Casebook 的 31 个真实代码视频案例（id、标题）。做新片前先挑 1–3 个最接近的 |
 | `casebook_case` | `caseId` | 案例检索卡（一句话、规格、何时抄、架构、最值得抄的做法、坑、CoExp 行号导读）+ 源码清单 + 20 帧联系表图片 |

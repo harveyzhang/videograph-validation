@@ -277,3 +277,57 @@
   .shot-thumb { width: 52px; height: 29px; }
   .topbar-meta { display: none; }
 }
+
+/* ---------- 特效箱 ---------- */
+.fx-box { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 28px; display: flex; flex-direction: column; gap: 12px; }
+.fx-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.fx-search { flex: 1; min-width: 280px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border-default); color: var(--text-muted); }
+.fx-search:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.fx-search input { flex: 1; background: transparent !important; border: 0 !important; box-shadow: none !important; color: var(--text-primary); font: 13px var(--font-sans); outline: none; }
+.fx-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.fx-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fx-chips button { height: 26px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--border-default); background: transparent; color: var(--text-tertiary); font-size: 12px; cursor: pointer; }
+.fx-chips button:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.fx-chips button.is-active { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--accent-hover); }
+.fx-notice { margin: 0; padding: 8px 12px; border-radius: var(--radius-md); background: var(--ok-subtle); color: var(--ok); font-size: 12.5px; }
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.fx-card { display: flex; flex-direction: column; text-align: left; padding: 0; border-radius: var(--radius-lg); overflow: hidden; cursor: pointer;
+  background: var(--surface-1); border: 1px solid var(--border-default); color: var(--text-primary); transition: transform .15s, border-color .15s, box-shadow .15s; }
+.fx-card:hover { transform: translateY(-2px); border-color: var(--accent-border); box-shadow: 0 10px 28px rgba(0, 0, 0, .4); }
+.fx-thumb { aspect-ratio: 16 / 9; display: grid; place-items: center; background: #050608; color: var(--text-muted); }
+.fx-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fx-card-text { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 4px; }
+.fx-card-text strong { font-size: 13px; }
+.fx-card-text small { font-size: 11.5px; line-height: 1.5; color: var(--text-tertiary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fx-card-tags { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 12px 12px; }
+.fx-card-tags em { font-style: normal; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; background: var(--surface-3); color: var(--text-tertiary); }
+.fx-card-tags em.is-beat { background: var(--attention-subtle); color: var(--attention); }
+.fx-detail { position: fixed; inset: 56px 24px 36px; z-index: 40; display: flex; flex-direction: column; border-radius: var(--radius-lg); background: rgba(14, 16, 20, .97);
+  border: 1px solid var(--border-strong); box-shadow: 0 30px 80px rgba(0, 0, 0, .6); backdrop-filter: blur(10px); overflow: hidden; }
+.fx-detail > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border-default); }
+.fx-detail h3 { margin: 2px 0 0; font-size: 18px; }
+.fx-detail-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+.fx-stage { padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fx-stage canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-md); background: #000; border: 1px solid var(--border-default); }
+.fx-stage-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fx-bpm { font-size: 12px; color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 6px; }
+.fx-bpm input { width: 64px; height: 28px; padding: 0 6px; }
+.fx-error { color: var(--bad); font-size: 11.5px; white-space: pre-wrap; margin: 0; }
+.fx-side { border-left: 1px solid var(--border-default); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.fx-summary { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.fx-when, .fx-avoid, .fx-bindings, .fx-provenance { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-tertiary); }
+.fx-when strong, .fx-avoid strong, .fx-bindings strong { margin-right: 8px; color: var(--text-secondary); }
+.fx-avoid strong { color: var(--attention); }
+.fx-provenance { color: var(--text-muted); font-size: 11.5px; }
+.fx-params { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border-subtle); }
+.fx-params h4 { margin: 0; font-size: 12px; color: var(--text-secondary); }
+.fx-param { display: grid; grid-template-columns: 84px 1fr 60px; align-items: center; gap: 8px; font-size: 12px; color: var(--text-tertiary); }
+.fx-param input[type="range"] { accent-color: var(--accent); width: 100%; }
+.fx-param input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--border-default); border-radius: 6px; background: transparent; }
+.fx-param code { font-size: 11px; color: var(--text-muted); text-align: right; }
+.fx-param-bool { grid-template-columns: auto 1fr; }
+.fx-suggest { width: 100%; background: var(--accent-subtle) !important; border-color: var(--accent-border) !important; color: var(--accent-hover) !important; }
+.fx-code summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); display: inline-flex; align-items: center; gap: 6px; }
+.fx-code pre { max-height: 260px; overflow: auto; margin: 8px 0 0; padding: 10px; border-radius: var(--radius-sm); background: #07080a; color: #b9c2d0; font: 11px/1.55 var(--font-mono, monospace); }
+.fx-applied ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.fx-applied code { margin-left: 8px; color: var(--text-muted); font-size: 11px; }

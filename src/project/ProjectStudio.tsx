@@ -2,7 +2,7 @@
 // 主视图是画面 + 全片时间线；节点图降为只读的“结构视图”。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, Handle, MiniMap, Panel, Position, ReactFlow, useNodesState, type Edge, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react';
-import { AudioLines, Clapperboard, FileCode2, FolderOpen, Upload, Play, Download, Lock, Unlock, Layers3, X, RefreshCw } from 'lucide-react';
+import { AudioLines, Clapperboard, FileCode2, FolderOpen, Upload, Play, Download, Lock, Unlock, Layers3, X, RefreshCw, Sparkles } from 'lucide-react';
 import { importBgm, projectApi, projectFile, serviceUrl, ProjectApiError, type DirectorSnapshot, type FeedbackAnchor, type VideoProject, type ProjectShot, type ProjectTransition, type ProjectJob, type ProjectSummary } from './api';
 import { LyricInspector } from './LyricInspector';
 import { TransitionInspector, transitionLabels } from './TransitionInspector';
@@ -11,6 +11,7 @@ import { ReviewCompare } from './ReviewCompare';
 import { SongStagePanel } from './SongStagePanel';
 import { DirectorPanel, type DirectorLoadState } from './DirectorPanel';
 import { Timeline } from './Timeline';
+import { EffectsBox } from './EffectsBox';
 import './project.css';
 import './review.css';
 
@@ -73,7 +74,7 @@ export default function ProjectStudio() {
   const [preview, setPreview] = useState<string | null>(null);
   const [previewKind, setPreviewKind] = useState('当前版本');
   const [compare, setCompare] = useState(false);
-  const [view, setView] = useState<'review' | 'graph'>('review');
+  const [view, setView] = useState<'review' | 'graph' | 'effects'>('review');
   // FB-02：预览播放器每 250ms postMessage 当前时间；只接受预览 origin + iframe source 匹配的消息。
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const previewTimeRef = useRef<number | null>(null);
@@ -318,11 +319,13 @@ export default function ProjectStudio() {
           <div className="segmented" role="group" aria-label="视图">
             <button className={view === 'review' ? 'is-active' : ''} aria-pressed={view === 'review'} onClick={() => setView('review')}><Play size={13} />审阅</button>
             <button className={view === 'graph' ? 'is-active' : ''} aria-pressed={view === 'graph'} onClick={() => setView('graph')}><Layers3 size={13} />结构视图</button>
+            <button className={view === 'effects' ? 'is-active' : ''} aria-pressed={view === 'effects'} onClick={() => setView('effects')}><Sparkles size={13} />特效箱</button>
           </div>
-          <span>{view === 'review' ? '看片 · 定位意见 · 对比采用' : '输入依赖与剪辑顺序（只读）'}</span>
+          <span>{view === 'review' ? '看片 · 定位意见 · 对比采用' : view === 'effects' ? `挑风格、调参数预览；选中镜头后可“建议 AI 使用”${selected ? ` · 当前：${selected.title}` : ''}` : '输入依赖与剪辑顺序（只读）'}</span>
         </div>
         {error && <div className="project-error" role="alert">{error}<button aria-label="关闭错误" onClick={() => setError('')}><X size={14} /></button></div>}
         {!project ? <div className="project-empty"><AudioLines size={40} /><h2>把 BGM 变成可以操作的工程</h2><p>源码、字体、素材、时间线和渲染版本一起保存。关闭页面后，后台任务仍然继续。</p><button className="action-button" onClick={() => void act(async () => { await refreshList(); })}><RefreshCw size={14} />重新连接工程服务</button><code>npm run service</code></div>
+          : view === 'effects' ? <EffectsBox projectId={project.id} shotId={selected?.id} shotTitle={selected?.title} shotRevision={selected?.inputRevision} busy={busy} />
           : view === 'graph' ? <ReactFlow key={project.id} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onInit={(instance) => { flow.current = instance; }}
             onNodeClick={(_, node) => { if (node.id.startsWith('shot-')) selectShot(node.id.slice(5)); else if (node.type === 'project-transition') selectTransition(node.id.slice('transition-'.length)); }} fitView minZoom={0.18} maxZoom={1.4} fitViewOptions={{ padding: 0.12 }} deleteKeyCode={null} nodesConnectable={false} proOptions={{ hideAttribution: true }}>
             <Background gap={24} size={1} /><Controls showInteractive={false} /><MiniMap />
@@ -372,6 +375,8 @@ export default function ProjectStudio() {
               setProject(next); resetForm(next.shots.find((shot) => shot.id === selected.id)!);
             })}>不采用候选，恢复修改前版本</button>
           </div>}
+          {selected.effects?.length ? <section className="inspector-section fx-applied"><h3>已套用特效 <span>{selected.effects.length} 层</span></h3>
+            <ol>{selected.effects.map((effect) => <li key={effect.id}><strong>{effect.name}</strong><code>{effect.id}</code></li>)}</ol></section> : null}
           <section className="inspector-section">
             <h3>修改意见 {openFeedback.length > 0 && <span>{openFeedback.length} 条未完成</span>}</h3>
             <FeedbackComposer shot={selected} projectId={project.id} busy={busy} hasPreviewTime={hasPreviewTime} getPreviewTime={() => previewTimeRef.current} onAdd={addFeedback} onProject={setProject} />

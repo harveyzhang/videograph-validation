@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph` 0.5.0 · 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评、案例库与上游来源）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
+toolset: 2026-10-02 · server `videograph` 0.6.0 · 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评、案例库与上游来源）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
 
 > **定位（2026-10-02）：VideoGraph 是 LLM 的 After Effects。** 你（agent）是操作者：建工程、规划、写镜头、调节奏、渲染与自查；人在前端看片、提意见、对比、采用/拒绝。改完不要只看“没有报错”——用 §3「节奏与画面感知」的工具看运动、量节奏、看全片。
 
@@ -159,6 +159,21 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 **MCP prompts**：`direct_video({ projectId })`（必填工程 ID，读当前 creation skill，引导 next→claim→制作→真实证据→返工/交付；同一 agent 完成，不调用第二套模型）、`respond_to_feedback({ projectId? })`（§4 流程 + 自查要求）、`design_rhythm({ projectId, section? })`（节奏设计与自查流程）。读取 prompt 不是工程写入，也不替代 `project_director_next` 的当前事实与闸门。
 
 产物文件位于 `projects/<projectId>/<file>`（如 `artifacts/<key>.png`、`exports/<jobId>/pv.mp4`），同机 agent 可直接读取 PNG 做视觉检查。
+
+### 特效箱（FX-01/02：LLM 的“效果和预设”）
+
+特效箱 = 本仓库 `effects/box/*.glsl`（原创动效，一个文件一个，编写规范见 `docs/FX-AUTHORING.md` 与样板 `effects/box/riso-two-ink.glsl`）+ 上游 gl-transitions（按需下载、不分发）。动效在预览、校验、导出中是同一份着色器；套用时代码与参数**冻结进工程**，特效箱以后更新不会改变已渲染的镜头（要升级就重新套用）。
+
+| 工具 | 必填参数 | 作用 / 返回 |
+|---|---|---|
+| `effect_search` | — | 按风格/用途关键词（risograph、水彩、卡点、glitch、胶片…）、`kind`（`post` 镜头后期 \| `transition` 转场）、`category` 检索，返回卡片：一句话、何时用/别用、参数与默认节拍绑定。查转场时本机没有 gl-transitions 会先按需下载 |
+| `effect_get` | `id` | 完整定义：参数规格、节拍绑定、来源与许可、着色器代码、可直接复制的套用调用示例 |
+| `effect_preview` | `id` | 在演示素材（`source`: type 文字海报 / scene 风景 / shapes 几何 / portrait 人像剪影）上渲染 4–12 帧帧序列图并返回图片；可带 `params` 比较不同参数。比较 2–3 个候选后再套用 |
+| `project_shot_effects` | `projectId, shotId, expectedInputRevision, effects` | 设置镜头后期栈：`[{ id, params?, bindings? }]`，按顺序叠加、最多 4 层、空数组清除；只接受 kind=post。`bindings` 覆盖节拍绑定：`{ 参数: { to: beat\|kick\|bar\|energy, amount } }`（`null` 取消）。镜头转为待验证，导演工程需带 `attemptToken`。套用后用 `project_stills` / `project_filmstrip` 看真实画面、`project_rhythm_report` 看节奏 |
+
+转场动效：`project_transition_configure` 的 `config` 用 `mode: "effect"` + `effectId`（如 `gl-directionalwarp`）+ 可选 `params` 与 `duration`。
+
+**选用原则**：一部片的后期风格要统一（同一段落用同一种媒介），节拍冲击类（拍点推镜/震动/RGB 分离）只放在副歌与重音段；不要每个镜头叠满 4 层；转场大多数仍应是节拍硬切，动效转场留给段落交界。
 
 ### 案例库与上游来源（FX-00）
 

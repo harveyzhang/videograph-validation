@@ -7,6 +7,12 @@ import { loadRegistry, cacheStatus } from './fx/fetcher.mjs';
 import { casebookList, casebookCase, casebookSearch, casebookRead } from './fx/casebook.mjs';
 // @ts-ignore — 纯 JS 模块，无类型声明。
 import { librarySearch, libraryRead } from './fx/library.mjs';
+// @ts-ignore — 纯 JS 模块，无类型声明。
+import { allEffects, loadGlTransitions } from './fx/effects.mjs';
+// @ts-ignore — 纯 JS 模块，无类型声明。
+import { searchEffects, effectCard } from '../fx/box/index.mjs';
+// @ts-ignore — 纯 JS 模块，无类型声明。
+import { withFxBrowser, renderFilmstrip } from './fx/preview-worker.mjs';
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: 'image/jpeg' | 'image/png' };
 
@@ -35,6 +41,21 @@ export const fxToolDefinitions = [
       cases: { type: 'array', items: { type: 'string' }, description: '限定案例 id；scope 为 source/all 时必填' },
       limit: { type: 'integer', minimum: 1, maximum: 100 },
     }, required: ['query'] },
+  },
+  {
+    name: 'effect_search',
+    description: '在特效箱里找动效（像 AE 的“效果和预设”）。按风格/用途关键词（如 risograph 水彩 glitch 卡点 胶片 热成像）、kind（post 镜头后期 | transition 转场）、category 过滤；返回卡片：一句话、何时用、何时别用、参数与默认节拍绑定。选中后先 effect_preview 看效果，再 project_shot_effects / project_transition_configure(mode=effect) 套用。首次查转场会按需下载 gl-transitions。',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' }, kind: { type: 'string', enum: ['post', 'transition'] }, category: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 100 } } },
+  },
+  {
+    name: 'effect_get',
+    description: '读取一个动效的完整定义：参数规格、默认节拍绑定、来源与许可、着色器代码，以及可直接复制的套用调用示例。',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'effect_preview',
+    description: '在演示素材上渲染动效的帧序列图（8–12 帧，标注时间与拍相位；转场标注进度），返回图片。source：type 文字海报 | scene 风景 | shapes 几何 | portrait 人像剪影。用来比较几种风格/参数后再决定套用哪一个。',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, params: { type: 'object' }, source: { type: 'string', enum: ['type', 'scene', 'shapes', 'portrait'] }, frames: { type: 'integer', minimum: 4, maximum: 12 } }, required: ['id'] },
   },
   {
     name: 'fx_library_search',
@@ -77,6 +98,32 @@ export async function callFxTool(name: string, args: Record<string, unknown>): P
   if (name === 'casebook_search') {
     const { hits, ...rest } = await casebookSearch({ query: args.query, scope: args.scope ?? 'cards', cases: args.cases, limit: args.limit ?? 40 });
     return { content: [json(rest), { type: 'text', text: hits.join('\n') || '（无命中）' }] };
+  }
+  if (name === 'effect_search') {
+    const kind = args.kind === 'transition' || args.kind === 'post' ? args.kind : undefined;
+    // 要找转场且本机还没有 gl-transitions 时，按需下载（40 秒时限，超时下次续传）。
+    if (kind !== 'post') { const cached = await loadGlTransitions(); if (!cached.total) await loadGlTransitions({ download: true, deadline: Date.now() + 40000 }); }
+    const { effects } = await allEffects();
+    const results = searchEffects(effects.filter((effect: Record<string, unknown>) => !effect.unsupported), { query: args.query ?? '', kind, category: args.category, limit: args.limit ?? 30 });
+    return { content: [json({ total: effects.length, count: results.length, results, hint: '先 effect_preview 看效果；镜头后期用 project_shot_effects，转场用 project_transition_configure mode=effect。' })] };
+  }
+  if (name === 'effect_get') {
+    const { effects } = await allEffects();
+    const effect = effects.find((entry: Record<string, unknown>) => entry.id === args.id);
+    if (!effect) throw new Error(`特效箱里没有 ${String(args.id)}；用 effect_search 查找`);
+    const example = effect.kind === 'transition'
+      ? { tool: 'project_transition_configure', args: { projectId: '<工程>', transitionId: '<转场>', expectedInputRevision: '<版本>', config: { mode: 'effect', effectId: effect.id, duration: 0.5, params: {} } } }
+      : { tool: 'project_shot_effects', args: { projectId: '<工程>', shotId: '<镜头>', expectedInputRevision: '<版本>', effects: [{ id: effect.id, params: {} }] } };
+    return { content: [json({ ...effectCard(effect), provenance: effect.provenance, unsupported: effect.unsupported, example }), { type: 'text', text: effect.glsl }] };
+  }
+  if (name === 'effect_preview') {
+    const { effects } = await allEffects();
+    const effect = effects.find((entry: Record<string, unknown>) => entry.id === args.id);
+    if (!effect) throw new Error(`特效箱里没有 ${String(args.id)}`);
+    if (effect.unsupported) throw new Error(`${effect.id} 暂不支持：${effect.unsupported}`);
+    const frames = Math.min(12, Math.max(4, Number(args.frames ?? 8)));
+    const png = await withFxBrowser((page: unknown) => renderFilmstrip(page, effect, { values: (args.params as Record<string, unknown>) ?? {}, source: (args.source as string) ?? 'type', toSource: 'shapes', frames, duration: effect.kind === 'transition' ? 1 : 1.75, width: 320, columns: 4 }));
+    return { content: [json({ id: effect.id, name: effect.name, kind: effect.kind, frames, note: '演示素材上的效果；套用到镜头后用 project_stills / project_filmstrip 看真实画面。' }), { type: 'image', data: png, mimeType: 'image/png' }] };
   }
   if (name === 'fx_library_search') {
     const { hits, ...rest } = await librarySearch({ query: args.query, sources: args.sources, limit: args.limit ?? 40 });

@@ -120,7 +120,7 @@ try {
   for (const [path, hash] of manifest.files) {
     if (sha256(readFileSync(join(dir, 'engine', path))) !== hash) throw new Error(`引擎快照被外部修改：${path}；请重新导入或通过镜头源码工具创建新版本。`);
   }
-  const hostHash = sha256(Buffer.concat(['reference-server.mjs', 'transition-runtime.mjs', 'transitions.mjs'].map((name) => readFileSync(new URL(name, import.meta.url)))));
+  const hostHash = sha256(Buffer.concat(['reference-server.mjs', 'transition-runtime.mjs', 'transitions.mjs', '../fx/runtime.mjs'].map((name) => readFileSync(new URL(name, import.meta.url)))));
   const fps = job.input.fps ?? frozen.output.fps;
   const samples = job.input.samples ?? frozen.output.samples;
   let shots = frozen.shots.map((shot) => ({ ...shot, start: Math.round(shot.start * fps) / fps, end: Math.round(shot.end * fps) / fps }));
@@ -166,17 +166,18 @@ try {
     const previous = incoming ? transitionPair({ ...frozen, shots }, incoming).left : null;
     // stills 不看 needs-generation：意见加入就会把镜头标为待改写，但当前源码仍可渲染，
     // agent 恰恰要在改写前看到锚点处的现状；模块文件缺失会在 readCode/loadShot 处自然报错。
-    await loadShot(pair ? pair.right : target, previous);
+    // 转场静帧必须显式加载出镜侧（与镜头/帧序列路径一致）；只靠依赖注入时出镜侧会渲染错误（2026-10-02 修复）。
+    await loadShot(pair ? pair.right : target, pair ? pair.left : previous);
     const readCode = (shot) => readFileSync(join(dir, `engine/app/src/scenes/${shot.module}.ts`), 'utf8');
-    const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post, code: readCode(previous) } } : null;
+    const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post, effects: previous.effects, code: readCode(previous) } } : null;
     const artifactHash = (relative) => sha256(readFileSync(join(dir, relative)));
     const images = [];
     for (const [index, t] of stillsInput.times.entries()) {
       const time = Math.round(t * 1000) / 1000;
       const key = sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(),
         code: pair ? `${readCode(pair.left)}\n${readCode(pair.right)}` : readCode(target), dependency,
-        config: pair ? transitionConfig(target) : null, scope: 'stills', version: stillsInput.version,
-        target: pair ? { start: pair.left.start, end: pair.right.end } : { start: target.start, end: target.end, params: target.params, post: target.post },
+        config: pair ? transitionConfig(target) : null, scope: 'stills-v2', version: stillsInput.version,
+        target: pair ? { start: pair.left.start, end: pair.right.end } : { start: target.start, end: target.end, params: target.params, post: target.post, effects: target.effects },
         t: time, width: stillsInput.width }));
       const file = join(dir, 'artifacts', `${key}.png`);
       if (!existsSync(file)) {
@@ -202,7 +203,7 @@ try {
     const shotKey = (shot) => {
       if (!shot.module) return { id: shot.id, missing: true };
       const incoming = incomingOf(shot), previous = previousOf(shot);
-      return { id: shot.id, code: readCode(shot), start: shot.start, end: shot.end, params: shot.params, post: shot.post,
+      return { id: shot.id, code: readCode(shot), start: shot.start, end: shot.end, params: shot.params, post: shot.post, effects: shot.effects,
         incoming: incoming ? { config: transitionConfig(incoming), from: previous?.module ? readCode(previous) : null } : null };
     };
     const keyFor = (involved) => sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(), scope: `ae-${job.kind}`, input, shots: involved.map(shotKey), version: 'ae-v2' }));
@@ -325,9 +326,9 @@ try {
     if (incoming?.status === 'needs-generation') throw new Error(`${incoming.id} 有新的转场指导，尚未配置效果`);
     const previous = incoming ? transitionPair({ ...frozen, shots }, incoming).left : null;
     if (previous?.status === 'needs-generation') throw new Error(`${previous.id} 尚未完成改写，不能验证相邻转场`);
-    const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post,
+    const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post, effects: previous.effects,
       code: readFileSync(join(dir, `engine/app/src/scenes/${previous.module}.ts`), 'utf8') } } : null;
-    const key = sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(), code, dependency, scope: targetTransition ? 'transition' : 'shot', shot: { start: shot.start, end: shot.end, params: shot.params, post: shot.post }, fps, samples, encoder: 'x264-crf18-veryfast-bt709-v1' }));
+    const key = sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(), code, dependency, scope: targetTransition ? 'transition' : 'shot', shot: { start: shot.start, end: shot.end, params: shot.params, post: shot.post, effects: shot.effects }, fps, samples, encoder: 'x264-crf18-veryfast-bt709-v1' }));
     const publishValidation = (validation) => mutateProject(projectId, undefined, (project) => {
       const current = project.shots.find((entry) => entry.id === shot.id);
       const currentTransition = incoming ? project.transitions.find((entry) => entry.id === incoming.id) : null;
