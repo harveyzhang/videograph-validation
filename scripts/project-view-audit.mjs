@@ -10,11 +10,11 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:5188/?view=project&project=${encodeURIComponent(projectId)}`);
-  await page.waitForSelector('.project-shot-node', { timeout: 30000 });
-  assert.equal(await page.locator('.project-shot-node').count(), 22);
+  await page.waitForSelector('.timeline-shot', { timeout: 30000 });
+  assert.equal(await page.locator('.timeline-shot').count(), 22);
   await page.reload();
-  await page.waitForSelector('.project-shot-node', { timeout: 30000 });
-  assert.equal(await page.locator('.project-shot-node').count(), 22);
+  await page.waitForSelector('.timeline-shot', { timeout: 30000 });
+  assert.equal(await page.locator('.timeline-shot').count(), 22);
   await page.getByRole('button', { name: '查看 / 修改真实源码' }).click();
   const code = await page.locator('.project-source-modal textarea').inputValue();
   assert.ok(code.includes('export default class'));

@@ -85,9 +85,9 @@ try {
     patch: { lyricPlan: { summary: 'invalid quote', elements: [{ name: 'wrong', quote: 'this is not a lyric', meaning: 'x', treatment: 'x' }] } } }, true);
   assert.ok(context.lines.length > 0);
   await page.goto(`${studio}/?view=project&project=${projectId}`);
-  await page.waitForSelector('.project-transition-node', { timeout: 30000 });
-  assert.equal(await page.locator('.project-shot-node').count(), 22);
-  assert.equal(await page.locator('.project-transition-node').count(), 21);
+  await page.waitForSelector('.timeline-transition', { timeout: 30000 });
+  assert.equal(await page.locator('.timeline-shot').count(), 22);
+  assert.equal(await page.locator('.timeline-transition').count(), 21);
   await page.locator('.project-transition-nav summary').click();
   await page.locator('.project-transition-nav button').first().click();
   await page.getByRole('button', { name: '预览这段转场', exact: true }).click();

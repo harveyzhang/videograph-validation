@@ -92,7 +92,8 @@ export interface DirectorAction {
   blocked?: boolean;
 }
 export interface DirectorReviewEvidence { jobId: string; file?: string; [key: string]: unknown }
-export interface DirectorReview { current: boolean; humanAccepted?: boolean; acceptedAt?: number; summary?: string; evidence?: DirectorReviewEvidence[] }
+export interface DirectorReviewIssue { severity: 'blocking' | 'warning' | 'intentional'; targetId?: string; t?: number; detail?: string }
+export interface DirectorReview { current: boolean; humanAccepted?: boolean; acceptedAt?: number; summary?: string; evidence?: DirectorReviewEvidence[]; issues?: DirectorReviewIssue[] }
 export interface DirectorSnapshot {
   projectId: string;
   revision: number;

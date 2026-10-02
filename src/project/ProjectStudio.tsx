@@ -1,4 +1,5 @@
-// ProjectStudio.tsx — 真工程的节点界面；工程/版本/作业状态均来自本地服务。
+// ProjectStudio.tsx — 审阅室：人看片、定位意见、对比采用；LLM 经 MCP 操作工程。工程/版本/作业状态均来自本地服务。
+// 主视图是画面 + 全片时间线；节点图降为只读的“结构视图”。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, Handle, MiniMap, Panel, Position, ReactFlow, useNodesState, type Edge, type Node, type NodeProps, type ReactFlowInstance } from '@xyflow/react';
 import { AudioLines, Clapperboard, FileCode2, FolderOpen, Upload, Play, Download, Lock, Unlock, Layers3, X, RefreshCw } from 'lucide-react';
@@ -9,21 +10,14 @@ import { FeedbackComposer } from './FeedbackComposer';
 import { ReviewCompare } from './ReviewCompare';
 import { SongStagePanel } from './SongStagePanel';
 import { DirectorPanel, type DirectorLoadState } from './DirectorPanel';
+import { Timeline } from './Timeline';
 import './project.css';
+import './review.css';
 
 type ShotNode = Node<{ shot: ProjectShot; projectId: string; index: number } & Record<string, unknown>, 'project-shot'>;
 type TransitionNode = Node<{ transition: ProjectTransition; fromTitle: string; toTitle: string } & Record<string, unknown>, 'project-transition'>;
 type ContextNode = Node<{ title: string; detail: string; kind: string } & Record<string, unknown>, 'project-context'>;
-type FeedbackNode = Node<{ shot: ProjectShot; projectId: string; busy: boolean; hasPreviewTime: boolean; getPreviewTime: () => number | null; onAdd: (input: { text: string; anchor?: FeedbackAnchor; preserve?: string[] }, revision: number) => Promise<boolean>; onProject: (project: VideoProject) => void } & Record<string, unknown>, 'project-feedback'>;
 const sourceLabel = (source: string) => source === 'mcp-authored' ? 'MCP 编写源码' : source === 'human-authored' ? '人工编辑源码' : '导入原工程源码';
-function FeedbackNodeView({ data }: NodeProps<FeedbackNode>) {
-  return <div className="studio-node project-feedback-node">
-    <div className="node-header"><FileCode2 size={14} /><strong>修改意见 → {data.shot.title}</strong></div>
-    <div className="node-body">
-      <FeedbackComposer shot={data.shot} projectId={data.projectId} busy={data.busy} hasPreviewTime={data.hasPreviewTime} getPreviewTime={data.getPreviewTime} onAdd={data.onAdd} onProject={data.onProject} />
-    </div><Handle type="source" position={Position.Left} />
-  </div>;
-}
 const statusLabel: Record<string, string> = { imported: '参考导入 · 待验证', ready: '已验证', 'needs-generation': '待 AI 改写', 'needs-validation': '待验证' };
 const jobLabel: Record<string, string> = { queued: '排队', running: '运行中', done: '完成', error: '失败', interrupted: '已中断', cancelled: '已取消' };
 
@@ -52,7 +46,8 @@ function TransitionNodeView({ data, selected }: NodeProps<TransitionNode>) {
     <Handle type="target" position={Position.Left} id="from" style={{ top: '30%' }} /><Handle type="target" position={Position.Left} id="to" style={{ top: '70%' }} /><Handle type="source" position={Position.Right} />
   </div>;
 }
-const nodeTypes = { 'project-shot': ShotNodeView, 'project-context': ContextNodeView, 'project-feedback': FeedbackNodeView, 'project-transition': TransitionNodeView };
+const nodeTypes = { 'project-shot': ShotNodeView, 'project-context': ContextNodeView, 'project-transition': TransitionNodeView };
+const phaseLabel: Record<string, string> = { analysis: '分析中', direction: '待定导演方案', planning: '规划中', producing: '制作中', validating: '验证中', repairing: '返修中', reviewing: '审片中', 'awaiting-human': '等待你确认', 'export-ready': '可以导出', exported: '已导出' };
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const analysisSourceLabel = (project: VideoProject) => {
   const source = project.analysis.source;
@@ -78,6 +73,7 @@ export default function ProjectStudio() {
   const [preview, setPreview] = useState<string | null>(null);
   const [previewKind, setPreviewKind] = useState('当前版本');
   const [compare, setCompare] = useState(false);
+  const [view, setView] = useState<'review' | 'graph'>('review');
   // FB-02：预览播放器每 250ms postMessage 当前时间；只接受预览 origin + iframe source 匹配的消息。
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const previewTimeRef = useRef<number | null>(null);
@@ -149,7 +145,7 @@ export default function ProjectStudio() {
 
   useEffect(() => {
     if (!project) return;
-    let stopped = false, polling = false;
+    let stopped = false, polling = false, round = 0;
     const id = project.id;
     const tick = async () => {
       if (polling) return; polling = true;
@@ -157,7 +153,7 @@ export default function ProjectStudio() {
         const [currentResult, jobResult, directorResult] = await Promise.allSettled([
           projectApi<VideoProject>(`/projects/${id}`),
           projectApi<{ jobs: ProjectJob[] }>(`/projects/${id}/jobs`),
-          projectApi<DirectorSnapshot>(`/projects/${id}/director`),
+          round++ % 3 === 0 ? projectApi<DirectorSnapshot>(`/projects/${id}/director`) : Promise.reject(new Error('skip-director')),
         ]);
         // 切工程的 load 在 React effect 清理之前即可完成；ref 也挡住这一小段竞态。
         if (stopped || activeProjectId.current !== id) return;
@@ -175,6 +171,8 @@ export default function ProjectStudio() {
           } else {
             setDirectorState({ projectId: id, status: 'ready', snapshot });
           }
+        } else if (directorResult.reason instanceof Error && directorResult.reason.message === 'skip-director') {
+          // 本轮不取导演状态，保留上一次结果
         } else if (directorResult.reason instanceof ProjectApiError && directorResult.reason.status === 404) {
           setDirectorState({ projectId: id, status: 'absent' });
         } else {
@@ -201,19 +199,6 @@ export default function ProjectStudio() {
     ];
     const shots: ShotNode[] = project.shots.map((shot, index) => ({ id: `shot-${shot.id}`, type: 'project-shot', selected: shot.id === selectedId,
       position: { x: 610 + (index % 4) * 560, y: Math.floor(index / 4) * 520 }, data: { shot, index, projectId: project.id } }));
-    const feedback: FeedbackNode[] = project.shots.flatMap((shot, index) => shot.id === selectedId || shot.feedback?.length ? [{
-      id: `feedback-${shot.id}`, type: 'project-feedback' as const, position: { x: 885 + (index % 4) * 560, y: Math.floor(index / 4) * 520 },
-      data: { shot, projectId: project.id, busy, hasPreviewTime, getPreviewTime: () => previewTimeRef.current,
-        onAdd: async (input: { text: string; anchor?: FeedbackAnchor; preserve?: string[] }, revision: number) => {
-          let ok = false;
-          await act(async () => {
-            const next = await projectApi<VideoProject>(`/projects/${project.id}/shots/${shot.id}/feedback`, { expectedInputRevision: revision, ...input });
-            setProject(next); if (selectedId === shot.id) resetForm(next.shots.find((entry) => entry.id === shot.id)!); setPreview(null); ok = true;
-          });
-          return ok;
-        },
-        onProject: setProject },
-    }] : []);
     const transitions: TransitionNode[] = (project.transitions ?? []).map((transition, index) => ({
       id: `transition-${transition.id}`, type: 'project-transition', selected: transition.id === selectedTransitionId,
       position: { x: 610 + (index % 4) * 560, y: Math.floor(index / 4) * 520 + 320 },
@@ -222,15 +207,14 @@ export default function ProjectStudio() {
     }));
     setNodes((previous) => {
       const existing = new Map(previous.map((node) => [node.id, node]));
-      return [...contexts, ...shots, ...feedback, ...transitions].map((node) => ({ ...existing.get(node.id), ...node, position: existing.get(node.id)?.position ?? node.position }));
+      return [...contexts, ...shots, ...transitions].map((node) => ({ ...existing.get(node.id), ...node, position: existing.get(node.id)?.position ?? node.position }));
     });
-  }, [project, selectedId, selectedTransitionId, setNodes, busy, resetForm, hasPreviewTime]);
+  }, [project, selectedId, selectedTransitionId, setNodes]);
   const edges: Edge[] = useMemo(() => !project ? [] : [
     { id: 'bgm-analysis', source: 'bgm', target: 'analysis' },
     ...project.shots.flatMap((shot) => [
       { id: `in-${shot.id}`, source: 'analysis', target: `shot-${shot.id}`, targetHandle: 'input' },
       { id: `out-${shot.id}`, source: `shot-${shot.id}`, sourceHandle: 'output', target: 'output' },
-      ...(shot.id === selectedId || shot.feedback?.length ? [{ id: `feedback-edge-${shot.id}`, source: `feedback-${shot.id}`, target: `shot-${shot.id}`, targetHandle: 'feedback', label: '修改意见' }] : []),
     ]),
     ...(project.transitions ?? []).flatMap((transition) => [
       { id: `tr-from-${transition.id}`, source: `shot-${transition.fromShotId}`, sourceHandle: 'output', target: `transition-${transition.id}`, targetHandle: 'from' },
@@ -247,12 +231,12 @@ export default function ProjectStudio() {
   const selectShot = (id: string, focus = false) => {
     if (busy) return;
     setSelectedId(id); setSelectedTransitionId(null); setPreview(null);
-    if (focus) void flow.current?.fitView({ nodes: [{ id: `shot-${id}` }], maxZoom: 1, padding: 0.4, duration: 220 });
+    if (focus && view === 'graph') void flow.current?.fitView({ nodes: [{ id: `shot-${id}` }], maxZoom: 1, padding: 0.4, duration: 220 });
   };
   const selectTransition = (id: string, focus = false) => {
     if (busy) return;
     setSelectedId(null); setSelectedTransitionId(id); setPreview(null);
-    if (focus) void flow.current?.fitView({ nodes: [{ id: `transition-${id}` }], maxZoom: 1, padding: .5, duration: 220 });
+    if (focus && view === 'graph') void flow.current?.fitView({ nodes: [{ id: `transition-${id}` }], maxZoom: 1, padding: .5, duration: 220 });
   };
   const update = (patch: Record<string, unknown>) => act(async () => {
     if (!project || !selected) return;
@@ -260,35 +244,113 @@ export default function ProjectStudio() {
     setProject(next); resetForm(next.shots.find((shot) => shot.id === selected.id)!); setPreview(null);
   });
 
-  return <div className="app-shell project-shell">
-    <header className="topbar"><div className="brand-lockup"><Layers3 size={19} /><strong>VideoGraph</strong><span>真实工程工作台</span></div>
-      <span className="project-title">{project?.name ?? '从一首 BGM 开始'}</span>
+  const shotIndex = selected ? project!.shots.findIndex((shot) => shot.id === selected.id) : -1;
+  const thumbOf = (shot?: ProjectShot | null) => shot?.validation?.thumb && project ? projectFile(project.id, `artifacts/${shot.validation.thumb}`) : null;
+  const viewerShot = selected ?? (selectedTransition ? project?.shots.find((shot) => shot.id === selectedTransition.toShotId) ?? null : null);
+  const viewerTitle = selected ? selected.title : selectedTransition ? `${project?.shots.find((shot) => shot.id === selectedTransition.fromShotId)?.title ?? selectedTransition.fromShotId} → ${project?.shots.find((shot) => shot.id === selectedTransition.toShotId)?.title ?? selectedTransition.toShotId}` : '选择一个镜头';
+  const phase = director?.phase;
+  const openFeedback = selected?.feedback?.filter((note) => note.status !== 'accepted') ?? [];
+  const addFeedback = async (input: { text: string; anchor?: FeedbackAnchor; preserve?: string[] }, revision: number) => {
+    if (!project || !selected) return false;
+    let ok = false;
+    await act(async () => {
+      const next = await projectApi<VideoProject>(`/projects/${project.id}/shots/${selected.id}/feedback`, { expectedInputRevision: revision, ...input });
+      setProject(next); resetForm(next.shots.find((entry) => entry.id === selected.id)!); setPreview(null); ok = true;
+    });
+    return ok;
+  };
+  const openPreview = (version: 'current' | 'before-feedback') => void act(async () => {
+    if (!project || !selected) return;
+    const data = await projectApi<{ url: string; range?: { start: number; end: number } }>(`/projects/${project.id}/preview`, { shotId: selected.id, ...(version === 'before-feedback' ? { version } : {}) });
+    if (selectionRef.current !== selectionKey) return;
+    const start = data.range?.start ?? selected.start, end = data.range?.end ?? selected.end;
+    setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${start}&rangeStart=${start}&rangeEnd=${end}`); setPreviewKind(version === 'before-feedback' ? '修改前版本' : '当前候选');
+  });
+
+  return <div className="app-shell project-shell review-shell">
+    <header className="topbar review-topbar">
+      <div className="brand-lockup"><span className="brand-mark"><Layers3 size={16} /></span><strong>VideoGraph</strong><span>审阅室</span></div>
+      <div className="topbar-project">
+        <span className="project-title">{project?.name ?? '从一首 BGM 开始'}</span>
+        {phase && <span className={`phase-pill phase-${phase}`}>{phaseLabel[phase] ?? phase}</span>}
+        {project && <span className="topbar-meta">{project.shots.length} 镜 · {project.song?.duration ? `${project.song.duration.toFixed(1)}s` : '分析中'} · rev {project.revision}</span>}
+      </div>
       <div className="top-actions">
+        {completedVideo?.result?.file && <a className="ghost-button" href={projectFile(project!.id, completedVideo.result.file)} target="_blank" rel="noreferrer"><Play size={14} />最新成片</a>}
         <button className="run-button" title={exportReason} disabled={exportDisabled} onClick={() => void act(async () => {
           const job = await projectApi<ProjectJob>(`/projects/${project!.id}/render`, { fps: project!.output.fps, samples: project!.output.samples }); setJobs((previous) => [job, ...previous]);
-        })}><Download size={14} />导出完整 PV</button></div>
+        })}><Download size={14} />导出完整 PV</button>
+      </div>
     </header>
-    <div className="project-workspace">
-      <aside className="sidebar project-library"><div className="sidebar-title">工程</div>
+    <div className="project-workspace review-workspace">
+      <aside className="sidebar project-library">
         <input ref={fileInput} type="file" accept="audio/*" hidden onChange={(event) => {
           const file = event.target.files?.[0]; if (!file) return;
           void act(async () => { const created = await importBgm(file); await refreshList(); await load(created.id); }); event.target.value = '';
         }} />
-        <button className="action-button" disabled={busy} onClick={() => fileInput.current?.click()}><Upload size={14} />只导入 BGM</button>
-        <p className="project-note">导入歌曲后自动分析节拍、段落与歌词；指纹命中参考 BGM 时复用已对齐数据，不拿旧歌词套用其他歌曲。</p>
-        {project && <p className="project-note">{analysisSourceLabel(project)}。{project.analysis.note}</p>}
-        <div className="project-list">{projects.map((entry) => <button key={entry.id} disabled={busy} className={`library-item ${entry.id === project?.id ? 'active' : ''}`} onClick={() => void act(() => load(entry.id))}><FolderOpen size={14} /><span>{entry.name}</span></button>)}</div>
-        {project && <><div className="sidebar-title">镜头导航 / {project.shots.length}</div><div className="project-shot-list">{project.shots.map((shot, index) => <button key={shot.id} className={selectedId === shot.id ? 'active' : ''} onClick={() => selectShot(shot.id, true)} title={shot.prompt}><span>{String(index + 1).padStart(2, '0')}</span><strong>{shot.title}</strong>{shot.locked ? <Lock size={12} /> : <small>{shot.status === 'ready' ? '✓' : '○'}</small>}</button>)}</div></>}
-        {project && <details className="project-transition-nav"><summary>转场导航 / {(project.transitions ?? []).length}</summary><div className="project-shot-list">{(project.transitions ?? []).map((transition, index) => <button key={transition.id} disabled={busy} className={selectedTransitionId === transition.id ? 'active' : ''} onClick={() => selectTransition(transition.id, true)}><span>{index + 1} → {index + 2}</span><strong>{transitionLabels[transition.mode]}</strong><small>{transition.locked ? '锁定' : transition.status === 'ready' ? '✓' : '○'}</small></button>)}</div></details>}
+        <div className="library-head">
+          <label className="project-picker"><span className="visually-hidden">切换工程</span>
+            <FolderOpen size={14} />
+            <select aria-label="切换工程" disabled={busy} value={project?.id ?? ''} onChange={(event) => void act(() => load(event.target.value))}>
+              {!project && <option value="">选择工程</option>}
+              {projects.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+            </select>
+          </label>
+          <button className="icon-button" disabled={busy} title="导入一首 BGM 新建工程：自动分析节拍、段落与歌词" aria-label="只导入 BGM" onClick={() => fileInput.current?.click()}><Upload size={15} /></button>
+        </div>
+        {project && <p className="library-source" title={project.analysis.note}>{analysisSourceLabel(project)}</p>}
+        {project && <><div className="sidebar-title">镜头 <span>{project.shots.length}</span></div>
+          <div className="project-shot-list">{project.shots.map((shot, index) => {
+            const open = (shot.feedback ?? []).filter((note) => note.status !== 'accepted');
+            const waiting = open.some((note) => note.status === 'responded' || note.status === 'needs-clarification');
+            return <button key={shot.id} className={selectedId === shot.id ? 'active' : ''} onClick={() => selectShot(shot.id, true)} title={shot.prompt}>
+              <span className="shot-thumb">{thumbOf(shot) ? <img src={thumbOf(shot)!} alt="" loading="lazy" /> : <Clapperboard size={14} />}</span>
+              <span className="shot-index">{String(index + 1).padStart(2, '0')}</span>
+              <span className="shot-text"><strong>{shot.title}</strong><small>{shot.start.toFixed(1)}–{shot.end.toFixed(1)}s</small></span>
+              {open.length > 0 && <em className={`shot-badge ${waiting ? 'is-waiting' : ''}`} title={waiting ? '有意见等你处理' : '有意见待 AI 处理'}>{open.length}</em>}
+              {shot.locked ? <Lock size={12} /> : <i className={`status-dot status-${shot.status}`} aria-label={statusLabel[shot.status] ?? shot.status} />}
+            </button>;
+          })}</div></>}
+        {project && <details className="project-transition-nav"><summary>转场 <span>{(project.transitions ?? []).length}</span></summary><div className="project-shot-list compact">{(project.transitions ?? []).map((transition, index) => <button key={transition.id} disabled={busy} className={selectedTransitionId === transition.id ? 'active' : ''} onClick={() => selectTransition(transition.id, true)}><span className="shot-index">{index + 1}→{index + 2}</span><span className="shot-text"><strong>{transitionLabels[transition.mode]}</strong></span><small>{transition.locked ? '锁定' : transition.status === 'ready' ? '✓' : '○'}</small></button>)}</div></details>}
       </aside>
-      <main className="project-canvas-area"><div className="canvas-toolbar"><strong>工程依赖图</strong><span>实线：输入依赖 · 卡片编号：剪辑顺序</span></div>
+      <main className="project-canvas-area review-main">
+        <div className="canvas-toolbar review-toolbar">
+          <div className="segmented" role="group" aria-label="视图">
+            <button className={view === 'review' ? 'is-active' : ''} aria-pressed={view === 'review'} onClick={() => setView('review')}><Play size={13} />审阅</button>
+            <button className={view === 'graph' ? 'is-active' : ''} aria-pressed={view === 'graph'} onClick={() => setView('graph')}><Layers3 size={13} />结构视图</button>
+          </div>
+          <span>{view === 'review' ? '看片 · 定位意见 · 对比采用' : '输入依赖与剪辑顺序（只读）'}</span>
+        </div>
         {error && <div className="project-error" role="alert">{error}<button aria-label="关闭错误" onClick={() => setError('')}><X size={14} /></button></div>}
         {!project ? <div className="project-empty"><AudioLines size={40} /><h2>把 BGM 变成可以操作的工程</h2><p>源码、字体、素材、时间线和渲染版本一起保存。关闭页面后，后台任务仍然继续。</p><button className="action-button" onClick={() => void act(async () => { await refreshList(); })}><RefreshCw size={14} />重新连接工程服务</button><code>npm run service</code></div>
-          : <ReactFlow key={project.id} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onInit={(instance) => { flow.current = instance; }}
+          : view === 'graph' ? <ReactFlow key={project.id} nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onInit={(instance) => { flow.current = instance; }}
             onNodeClick={(_, node) => { if (node.id.startsWith('shot-')) selectShot(node.id.slice(5)); else if (node.type === 'project-transition') selectTransition(node.id.slice('transition-'.length)); }} fitView minZoom={0.18} maxZoom={1.4} fitViewOptions={{ padding: 0.12 }} deleteKeyCode={null} nodesConnectable={false} proOptions={{ hideAttribution: true }}>
             <Background gap={24} size={1} /><Controls showInteractive={false} /><MiniMap />
-            {preview && <Panel position="bottom-center" className="project-preview"><div><strong>{selected?.title ?? (selectedTransition ? `${selectedTransition.fromShotId} → ${selectedTransition.toShotId}` : '')} · {previewKind} · 真实引擎</strong><button aria-label="关闭引擎预览" onClick={() => setPreview(null)}><X size={15} /></button></div><iframe ref={previewFrameRef} title="真实镜头播放器" src={preview} allow="autoplay" /></Panel>}
-          </ReactFlow>}
+          </ReactFlow>
+          : <div className="review-stage">
+            <section className="viewer">
+              <div className="viewer-head">
+                <div><span className="eyebrow">{selected ? `镜头 ${String(shotIndex + 1).padStart(2, '0')} · ${selected.id}` : selectedTransition ? `转场 · ${transitionLabels[selectedTransition.mode]}` : ''}</span><h2>{viewerTitle}</h2></div>
+                <div className="viewer-meta">
+                  {selected && <span>{selected.start.toFixed(2)}–{selected.end.toFixed(2)}s</span>}
+                  {selected && <span className={`status-pill status-${selected.status}`}>{statusLabel[selected.status] ?? selected.status}</span>}
+                  {preview && <span className="status-pill is-live">{previewKind} · 真实引擎</span>}
+                </div>
+              </div>
+              <div className="viewer-frame">
+                {preview ? <><iframe ref={previewFrameRef} title="真实镜头播放器" src={preview} allow="autoplay" /><button className="viewer-close" aria-label="关闭引擎预览" onClick={() => setPreview(null)}><X size={15} /></button></>
+                  : thumbOf(viewerShot) ? <img key={thumbOf(viewerShot)!} src={thumbOf(viewerShot)!} alt={`${viewerTitle} 已验证静帧`} />
+                  : <div className="viewer-empty"><Clapperboard size={28} /><span>{viewerShot ? '尚未渲染：等待 AI 写入并验证' : '在左侧或时间线上选择镜头'}</span></div>}
+              </div>
+              {selected && <div className="viewer-actions">
+                <button className="primary-soft" disabled={busy || selected.status === 'needs-generation'} onClick={() => openPreview('current')}><Play size={14} />预览此镜头</button>
+                {selected.reviewBaseline && <button className="mini-button" disabled={busy} onClick={() => openPreview('before-feedback')}>预览修改前版本</button>}
+                {awaitingReview.length > 0 && <button className="mini-button is-attention" disabled={busy || selected.status !== 'ready'} onClick={() => setCompare(true)}>对比修改前后</button>}
+                <span className="viewer-hint">{selected.prompt}</span>
+              </div>}
+            </section>
+            <Timeline project={project} selectedId={selectedId} selectedTransitionId={selectedTransitionId} onSelectShot={(id) => selectShot(id)} onSelectTransition={(id) => selectTransition(id)} />
+          </div>}
       </main>
       <aside className="sidebar project-inspector">
         {project && beforePlanning && <SongStagePanel key={project.id} project={project} busy={busy} onProject={setProject} onAction={act} />}
@@ -297,50 +359,48 @@ export default function ProjectStudio() {
           setProject(next);
         })} />}
         {selectedTransition && project ? <TransitionInspector key={`${project.id}:${selectedTransition.id}`} project={project} transition={selectedTransition} busy={busy} onProject={setProject} onAction={act} onJob={(job) => setJobs((previous) => [job, ...previous.filter((entry) => entry.id !== job.id)])} onPreview={(url, label) => {
-        if (selectionRef.current !== selectionKey) return false;
-        setPreview(url); setPreviewKind(label); return true;
-      }} /> : selected && project ? <>
-        <div className="sidebar-title">{selected.title}<span>输入 v{selected.inputRevision}</span></div>
-        <p className="project-note">{selected.start.toFixed(3)}–{selected.end.toFixed(3)}s · {statusLabel[selected.status] ?? selected.status}</p>
-        <div className="project-inspector-actions"><button className="mini-button" disabled={busy || selected.status === 'needs-generation'} onClick={() => void act(async () => {
-          const data = await projectApi<{ url: string; range?: { start: number; end: number } }>(`/projects/${project.id}/preview`, { shotId: selected.id });
-          if (selectionRef.current !== selectionKey) return;
-          const start = data.range?.start ?? selected.start, end = data.range?.end ?? selected.end;
-          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${start}&rangeStart=${start}&rangeEnd=${end}`); setPreviewKind('当前候选');
-        })}><Play size={13} />预览此镜头</button>
-          <button className="mini-button" disabled={busy || selected.status === 'needs-generation'} onClick={() => void act(async () => { const job = await projectApi<ProjectJob>(`/projects/${project.id}/validate`, { shotId: selected.id }); setJobs((previous) => [job, ...previous]); })}>5 帧校验</button>
-          <button className="mini-button" disabled={busy} onClick={() => void update({ locked: !selected.locked })}>{selected.locked ? <Unlock size={13} /> : <Lock size={13} />}{selected.locked ? '解锁' : '锁定'}</button>
-        </div>
-        {selected.reviewBaseline && <button className="mini-button" disabled={busy} onClick={() => void act(async () => {
-          const data = await projectApi<{ url: string; range?: { start: number; end: number } }>(`/projects/${project.id}/preview`, { shotId: selected.id, version: 'before-feedback' });
-          if (selectionRef.current !== selectionKey) return;
-          const start = data.range?.start ?? selected.start, end = data.range?.end ?? selected.end;
-          setPreview(`${data.url}/?only=${encodeURIComponent(selected.id)}&t=${start}&rangeStart=${start}&rangeEnd=${end}`); setPreviewKind('修改前版本');
-        })}>预览修改前版本</button>}
-        {awaitingReview.length > 0 && <div className="project-review-box"><strong>AI 已响应 {awaitingReview.length} 条意见，等待你确认</strong>
-          <p>技术验证不代表符合你的创作要求。在并排对比中检查同一时间点的修改前与当前候选，再选择采用。</p>
-          <button className="action-button" disabled={busy || selected.status !== 'ready'} onClick={() => setCompare(true)}>并排对比，采用或拒绝</button>
-          <button className="mini-button" disabled={busy || selected.locked} onClick={() => void act(async () => {
-            const next = await projectApi<VideoProject>(`/projects/${project.id}/shots/${selected.id}/reject-feedback`, { expectedInputRevision: selected.inputRevision });
-            setProject(next); resetForm(next.shots.find((shot) => shot.id === selected.id)!);
-          })}>不采用候选，恢复修改前版本</button>
-        </div>}
-        {staleForm && <div className="shot-lint">镜头已在外部更新，当前草稿基于旧版本。<button className="mini-button" onClick={() => resetForm(selected)}>载入最新版本</button></div>}
-        <label className="field"><span>镜头提示词</span><textarea rows={6} value={form.prompt} disabled={selected.locked} onChange={(event) => setForm({ ...form, prompt: event.target.value })} /></label>
-        <button className="action-button" disabled={busy || selected.locked || Boolean(staleForm)} onClick={() => void update({ prompt: form.prompt })}>保存意图，等待 MCP 改写</button>
-        <p className="project-note">保存提示词不会假装画面已改变。让 agent 读取此镜头并提交源码，再校验、预览。</p>
-        <label className="field"><span>场景参数 / JSON</span><textarea rows={4} value={form.params} disabled={selected.locked} onChange={(event) => setForm({ ...form, params: event.target.value })} /></label>
-        <button className="mini-button" disabled={busy || selected.locked || Boolean(staleForm)} onClick={() => { try { void update({ params: JSON.parse(form.params) }); } catch { setError('参数不是有效 JSON'); } }}>应用参数</button>
-        <button className="action-button" disabled={busy} onClick={() => void act(async () => {
-          const data = await projectApi<{ shot: ProjectShot; code: string }>(`/projects/${project.id}/shots/${selected.id}/source`);
-          setSource({ projectId: project.id, shotId: selected.id, revision: data.shot.inputRevision, code: data.code, feedback: (data.shot.feedback ?? []).filter((note) => note.status !== 'accepted'), feedbackIds: [] });
-        })}><FileCode2 size={14} />查看 / 修改真实源码</button>
-        <LyricInspector key={`${project.id}:${selected.id}`} projectId={project.id} shot={selected} busy={busy} onProject={setProject} onAction={act} />
-        <p className="project-note">来源：{sourceLabel(selected.source)}。{selected.validation ? ` 已通过 ${selected.validation.samples} 帧抽检；不代表逐帧/审美验收。` : ''}</p>
-      </> : <div className="project-note">选中镜头以编辑提示词、参数和源码。</div>}
-        <div className="project-jobs"><div className="sidebar-title">后台任务</div>{jobs.slice(0, 5).map((job) => <article key={job.id}><strong>{jobKindLabel(job)} · {jobLabel[job.status] ?? job.status}</strong><p>{job.detail} {Number.isFinite(job.progress) ? `${Math.round(job.progress * 100)}%` : ''}</p><small>任务 {job.id}</small>{job.error && <pre>{job.error}</pre>}{job.kind !== 'analysis' && ['running', 'queued'].includes(job.status) && <button className="mini-button" onClick={() => void act(async () => { await projectApi(`/projects/${project!.id}/jobs/${job.id}/cancel`, {}); })}>取消任务</button>}
-          {job.result?.file && <a href={projectFile(project!.id, job.result.file)} target="_blank" rel="noreferrer">打开成片 · 工程 rev_{job.inputRevision}</a>}</article>)}</div>
-        {completedVideo && <p className="project-note">最新成片：{completedVideo.result?.frames} 帧 / {completedVideo.result?.seconds?.toFixed(2)}s。后续编辑不改变已经导出的版本。</p>}
+          if (selectionRef.current !== selectionKey) return false;
+          setView('review'); setPreview(url); setPreviewKind(label); return true;
+        }} /> : selected && project ? <>
+          <div className="sidebar-title">{selected.title}<span>输入 v{selected.inputRevision}</span></div>
+          <p className="inspector-meta">{selected.start.toFixed(2)}–{selected.end.toFixed(2)}s · {sourceLabel(selected.source)}{selected.validation ? ` · 已抽检 ${selected.validation.samples} 帧` : ''}</p>
+          {awaitingReview.length > 0 && <div className="project-review-box"><strong>AI 已响应 {awaitingReview.length} 条意见，等待你确认</strong>
+            <p>技术验证不代表符合你的创作要求。在并排对比中检查同一时间点的修改前与当前候选，再选择采用。</p>
+            <button className="action-button" disabled={busy || selected.status !== 'ready'} onClick={() => setCompare(true)}>并排对比，采用或拒绝</button>
+            <button className="mini-button" disabled={busy || selected.locked} onClick={() => void act(async () => {
+              const next = await projectApi<VideoProject>(`/projects/${project.id}/shots/${selected.id}/reject-feedback`, { expectedInputRevision: selected.inputRevision });
+              setProject(next); resetForm(next.shots.find((shot) => shot.id === selected.id)!);
+            })}>不采用候选，恢复修改前版本</button>
+          </div>}
+          <section className="inspector-section">
+            <h3>修改意见 {openFeedback.length > 0 && <span>{openFeedback.length} 条未完成</span>}</h3>
+            <FeedbackComposer shot={selected} projectId={project.id} busy={busy} hasPreviewTime={hasPreviewTime} getPreviewTime={() => previewTimeRef.current} onAdd={addFeedback} onProject={setProject} />
+          </section>
+          <details className="inspector-section"><summary>歌词依据与画面元素</summary>
+            <LyricInspector key={`${project.id}:${selected.id}`} projectId={project.id} shot={selected} busy={busy} onProject={setProject} onAction={act} />
+          </details>
+          <div className="inspector-tools">
+            <button className="mini-button" disabled={busy} onClick={() => void act(async () => {
+              const data = await projectApi<{ shot: ProjectShot; code: string }>(`/projects/${project.id}/shots/${selected.id}/source`);
+              setSource({ projectId: project.id, shotId: selected.id, revision: data.shot.inputRevision, code: data.code, feedback: (data.shot.feedback ?? []).filter((note) => note.status !== 'accepted'), feedbackIds: [] });
+            })}><FileCode2 size={13} />查看 / 修改真实源码</button>
+            <button className="mini-button" disabled={busy || selected.status === 'needs-generation'} onClick={() => void act(async () => { const job = await projectApi<ProjectJob>(`/projects/${project.id}/validate`, { shotId: selected.id }); setJobs((previous) => [job, ...previous]); })}>5 帧校验</button>
+            <button className="mini-button" disabled={busy} onClick={() => void update({ locked: !selected.locked })}>{selected.locked ? <Unlock size={13} /> : <Lock size={13} />}{selected.locked ? '解锁' : '锁定'}</button>
+          </div>
+          <details className="inspector-section"><summary>高级：镜头意图与参数</summary>
+            {staleForm && <div className="shot-lint">镜头已在外部更新，当前草稿基于旧版本。<button className="mini-button" onClick={() => resetForm(selected)}>载入最新版本</button></div>}
+            <label className="field"><span>镜头提示词</span><textarea rows={5} value={form.prompt} disabled={selected.locked} onChange={(event) => setForm({ ...form, prompt: event.target.value })} /></label>
+            <button className="action-button" disabled={busy || selected.locked || Boolean(staleForm)} onClick={() => void update({ prompt: form.prompt })}>保存意图，等待 MCP 改写</button>
+            <p className="project-note">保存提示词不会假装画面已改变。让 agent 读取此镜头并提交源码，再校验、预览。</p>
+            <label className="field"><span>场景参数 / JSON</span><textarea rows={4} value={form.params} disabled={selected.locked} onChange={(event) => setForm({ ...form, params: event.target.value })} /></label>
+            <button className="mini-button" disabled={busy || selected.locked || Boolean(staleForm)} onClick={() => { try { void update({ params: JSON.parse(form.params) }); } catch { setError('参数不是有效 JSON'); } }}>应用参数</button>
+          </details>
+        </> : <div className="project-note">选中镜头查看画面、提修改意见。</div>}
+        <section className="project-jobs"><div className="sidebar-title">后台任务 {activeJobs.length > 0 && <span>{activeJobs.length} 进行中</span>}</div>{jobs.slice(0, 5).map((job) => <article key={job.id} className={`job-${job.status}`}><strong>{jobKindLabel(job)} · {jobLabel[job.status] ?? job.status}</strong>{['running', 'queued'].includes(job.status) && <div className="job-progress"><i style={{ width: `${Math.round((job.progress ?? 0) * 100)}%` }} /></div>}<p>{job.detail}</p>{job.error && <pre>{job.error}</pre>}{job.kind !== 'analysis' && ['running', 'queued'].includes(job.status) && <button className="mini-button" onClick={() => void act(async () => { await projectApi(`/projects/${project!.id}/jobs/${job.id}/cancel`, {}); })}>取消任务</button>}
+          {job.result?.file && <a href={projectFile(project!.id, job.result.file)} target="_blank" rel="noreferrer">打开成片 · 工程 rev_{job.inputRevision}</a>}</article>)}
+          {!jobs.length && <p className="project-note">暂无任务。</p>}
+          {completedVideo && <p className="project-note">最新成片：{completedVideo.result?.frames} 帧 / {completedVideo.result?.seconds?.toFixed(2)}s。后续编辑不改变已经导出的版本。</p>}
+        </section>
       </aside>
     </div>
     <footer className="statusbar"><span>本地工程 · SQLite + 引擎快照</span><span>{project ? `工程 rev_${project.revision} · ${project.song?.duration?.toFixed(2) ?? '歌曲分析中'}${project.song ? `s · ${project.output.fps}fps` : ''}` : `服务：${serviceUrl}`}</span><span>{activeJobs.length ? '后台任务运行中，页面可关闭' : '就绪'}</span></footer>

@@ -198,7 +198,7 @@ try {
   }
   await player.locator('#c').click();
   await page.waitForTimeout(1300);
-  const composer = page.locator('.project-feedback-node .fb-composer');
+  const composer = page.locator('.project-inspector .fb-composer');
   await composer.getByRole('button', { name: '定位到当前预览时间' }).click();
   await composer.locator('.fb-chip:has-text("s")').first().waitFor({ timeout: 5000 });
   await composer.getByLabel(`${shot.title}的修改意见`).fill('终端回显行太抢戏，缩小一号');

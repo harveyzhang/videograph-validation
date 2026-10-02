@@ -51,8 +51,8 @@ try {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${studioBase}/?view=project&project=${projectId}`);
-  await page.waitForSelector('.project-feedback-node', { timeout: 60000 });
-  const composer = page.locator('.project-feedback-node .fb-composer');
+  await page.waitForSelector('.project-inspector .fb-composer', { timeout: 60000 });
+  const composer = page.locator('.project-inspector .fb-composer');
 
   // 1. 打开预览 → 等夹具引擎模块就绪 → 播放 → 播放器广播时间 → 定位到当前预览时间。
   await page.getByRole('button', { name: '预览此镜头', exact: true }).click();

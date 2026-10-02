@@ -12,15 +12,36 @@ const object = (value, name) => { check(value && typeof value === 'object' && !A
 const strings = (value, name) => { check(Array.isArray(value) && value.length <= 20 && value.every((v) => typeof v === 'string' && v.length <= 300), `${name} 需要最多20项短文本`); return value; };
 const signature = (value) => sha256(JSON.stringify(value));
 
-export function analysisSignature(project) { return signature({ audio: project.audio.hash, song: project.song }); }
+// 签名缓存只在一次同步的只读计算（getDirector）内有效：期间不改任何工程对象，作用域结束即丢弃，写路径永远实时计算。
+// 不加缓存时每个任务都要对整份歌曲分析（含包络，约 0.5MB）重复做 SHA-256，258 个任务的工程一次读取约 4.7 秒并阻塞服务。
+let memoScope = null;
+function memo(owner, key, compute) {
+  if (!memoScope || !owner || typeof owner !== 'object') return compute();
+  let entries = memoScope.get(owner);
+  if (!entries) memoScope.set(owner, entries = new Map());
+  if (!entries.has(key)) entries.set(key, compute());
+  return entries.get(key);
+}
+function withSignatureMemo(read) {
+  if (memoScope) return read();
+  memoScope = new WeakMap();
+  try { return read(); } finally { memoScope = null; }
+}
+export function analysisSignature(project) { return memo(project, 'analysis', () => signature({ audio: project.audio.hash, song: project.song })); }
 const targetData = (target) => target && ({ id: target.id, token: target.inputToken, start: target.start, end: target.end, module: target.module, code: target.codeHash, params: target.params, post: target.post, mode: target.mode, duration: target.duration, from: target.fromShotId, to: target.toShotId });
 // 旧任务快照可能缺 shots/transitions（2026-09-30 前的反馈流程）；缺数组按空算，签名自然不匹配而非崩溃。
 const targetArrays = (project) => ({ shots: project.shots ?? [], transitions: project.transitions ?? [] });
 export function productionSignature(project) {
+  return memo(project, 'production', () => productionSignatureRaw(project));
+}
+function productionSignatureRaw(project) {
   const { shots, transitions } = targetArrays(project);
   return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, shots: shots.map(targetData), transitions: transitions.map(targetData) });
 }
 function scopeSignature(project, kind, targetId) {
+  return memo(project, `scope:${kind}:${targetId}`, () => scopeSignatureRaw(project, kind, targetId));
+}
+function scopeSignatureRaw(project, kind, targetId) {
   const { shots, transitions } = targetArrays(project);
   if (kind === 'shot') {
     const target = shots.find((s) => s.id === targetId);
@@ -175,6 +196,9 @@ function rawNext(project, jobs) {
 }
 
 export function getDirector(id) {
+  return withSignatureMemo(() => getDirectorUncached(id));
+}
+function getDirectorUncached(id) {
   const project = readProject(id);
   const result = rawNext(project, listJobs(id, 10000));
   for (const item of result.actions) {
