@@ -179,6 +179,11 @@
 `FX-00 → FX-01 → (FX-02 ∥ FX-03) → FX-04 → FX-05 →（验证后）FX-06`
 
 - **FX-00 许可与登记**：manifest/provenance JSON Schema + 校验器；SPDX 白/黑名单；`effects/` 目录与 `effects/REGISTRY.json`；导出 CREDITS 自动汇总。验收：缺许可/黑名单许可/缺署名的包被拒。
+  - **FX-00 第一步 ✅（2026-10-02，集成者，已运行验证）：按需下载，不分发**。用户决定“能用的都做成需要时才下载”。本仓库只有 `effects/sources.json`（上游仓库、固定 40 位 commit、许可/状态、署名、允许下载的文件规则与第三方排除说明）；`src/server/fx/fetcher.mjs` 在用户机器上按固定 commit 从 GitHub 下载到 `.cache/fx`（不入库）：只允许 api.github.com/raw.githubusercontent.com，git blob SHA-1 校验内容，路径安全检查，逐文件许可（来源级 / 子目录覆盖 / 文件头声明），不在白名单的不落盘并记入可复判的拒绝记录，provenance.json 记每个文件的许可与署名。`src/server/fx/casebook.mjs` + `src/server/mcp-fx-tools.ts`：MCP 工具 `fx_sources / casebook_list / casebook_case（检索卡+联系表图片）/ casebook_search / casebook_read`，在 MCP 进程内执行、不需要工程服务；每个结果附许可与第三方素材说明。server `videograph` 0.5.0，MCP-GUIDE §3 新小节。
+    - 登记来源：`videos-casebook`（作者授权待书面，排除字体/音乐音效/视频/非联系表图片/压缩包/>1MB 文件；atlas、stop-motion-3d、moonfilm kit 子目录按 MIT 覆盖）；`gl-transitions`（逐文件头许可）。
+    - 实测：casebook 31 案例、参考文本 121 个文件约 12 秒下完；按需拉 ai-rise 源码 14 个文件（字体/音频被排除）；gl-transitions 125 个转场全部通过逐文件许可（123 MIT、2 BSD；首轮因 “BSD 3 Clause” 写法被误拒，已修规范化并让拒绝记录可复判）。
+    - 测试：`scripts/tests/fx/fetcher.test.mjs`（8 项：选择规则、逐文件许可、子目录覆盖、篡改拒绝、路径/主机限制、缓存不再联网、规则放宽后复判）+ `fx-mcp.test.mjs`（3 项离线 stdio）；全量 151/151，`npm run build` ✓。
+    - 未做（FX-00 剩余）：动效包 manifest/provenance JSON Schema、导出 CREDITS 自动汇总。
 - **FX-01 运行时**：引擎内动效宿主——每镜头后期链（复用 `gl.ts` 的 `FSPass/makeRT`）、转场节点新增 `mode: effect`（gl-transitions 接口）、参数 schema 校验、节拍绑定（参数 = 基础值 + 强度 × 脉冲(beatPhase/kick/词起点)）；缓存键含动效包 hash。验收：同输入逐像素一致；改动效参数只让该镜头/该转场缓存失效。
 - **FX-02 首批 30 个**：15 转场（gl-transitions）、10 后期（postprocessing/three examples/glfx）、5 第一方（pdoom 引擎）。每个自动出预览图并过确定性测试；`effects/CREDITS.md` 齐全。
 - **FX-03 MCP 与审阅室**：`effect_search / effect_get（含预览图）/ effect_apply / effect_update / effect_remove`；`effect_apply` 走版本检查并让目标进入待验证；前端在镜头/转场上显示动效栈（只读，可对单个动效提意见）。MCP-GUIDE 同步。

@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "note": "动效库/案例库的上游来源登记。本仓库只保存这份元数据（地址、固定 commit、许可、署名、允许下载的文件规则），不保存上游代码或素材；用户机器在需要时从上游按固定 commit 下载，并用 git blob 哈希校验。见 ROADMAP「FX 冲刺」。",
+  "policy": {
+    "spdxAllow": ["MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "Zlib", "ISC", "CC0-1.0", "CC-BY-4.0", "OFL-1.1"],
+    "licenseRefAllow": ["LicenseRef-author-grant"],
+    "hosts": ["api.github.com", "raw.githubusercontent.com"]
+  },
+  "sources": [
+    {
+      "id": "videos-casebook",
+      "title": "Code Video Casebook（31 个代码视频案例：检索卡、CoExp 复盘、源码、联系表）",
+      "repo": "t01090943940-afk/Videos",
+      "commit": "f3d138ed4f85d7dfa14ff4e0016ccdf4b3b4abf2",
+      "root": "skills/code-video-casebook",
+      "license": "LicenseRef-author-grant",
+      "licenseStatus": "author-grant-pending",
+      "licenseNote": "2026-10-02 作者口头授权用户使用其自有内容（代码、文档、自生成配乐与成片）；书面 LICENSE 待作者在仓库落地。第三方素材不在授权范围，已由下方规则排除。",
+      "attribution": "Code Video Casebook by t01090943940-afk (https://github.com/t01090943940-afk/Videos)",
+      "include": ["skills/code-video-casebook/**"],
+      "exclude": ["**/*.ttf", "**/*.otf", "**/*.woff", "**/*.woff2", "**/*.mp3", "**/*.wav", "**/*.flac", "**/*.m4a", "**/*.ogg", "**/*.mp4", "**/*.mov", "**/*.webm", "**/*.zip", "**/*.tgz", "**/*.skill"],
+      "extensions": ["md", "json", "txt", "js", "mjs", "cjs", "ts", "py", "html", "css", "glsl", "frag", "vert", "yaml", "yml", "sh", "toml", "csv", "jpg"],
+      "imageAllow": ["**/references/cases/*/preview.jpg"],
+      "maxFileBytes": 1000000,
+      "licenseOverrides": [
+        { "glob": "skills/code-video-casebook/assets/cases/atlas/motion-library-atlas/**", "license": "MIT", "attribution": "motion-library-atlas © 2026 VIBEMOTION workstation contributors (MIT)" },
+        { "glob": "skills/code-video-casebook/assets/cases/stopmotion/stop-motion-3d/**", "license": "MIT", "attribution": "stop-motion-3d skill © 2026 stop-motion-3d skill authors (MIT)" },
+        { "glob": "skills/code-video-casebook/assets/cases/moonlamp/moonfilm/scripts/kit/**", "license": "MIT", "attribution": "moonfilm kit © 2026 stop-motion-3d skill authors (MIT)" }
+      ],
+      "thirdPartyNotes": "不下载：字体（多为 OFL，需要时从字体官方来源另行获取）、音乐与音效（含现成歌曲与素材库音效）、视频、除联系表 preview.jpg 外的图片（含真人照片、来源不明纹理）、压缩包。文本中出现的品牌名、成员信息、二维码属于原项目，做模板时必须替换。"
+    },
+    {
+      "id": "gl-transitions",
+      "title": "gl-transitions（GLSL 转场集合，transition(uv) 统一接口）",
+      "repo": "gl-transitions/gl-transitions",
+      "commit": "902218a1b63773ac0d0d9f491951da3392365bfe",
+      "root": "transitions",
+      "license": "per-file",
+      "licenseStatus": "per-file-header",
+      "licenseNote": "仓库级许可未被 GitHub 识别（NOASSERTION）；每个转场文件头部有 `// License: X`，按文件判定，只下载头部许可在白名单内的文件。",
+      "licenseHeader": "^//\\s*License:\\s*(.+?)\\s*$",
+      "attribution": "gl-transitions (https://github.com/gl-transitions/gl-transitions), per-file authors",
+      "include": ["transitions/*.glsl"],
+      "exclude": [],
+      "extensions": ["glsl"],
+      "maxFileBytes": 200000,
+      "licenseOverrides": []
+    }
+  ]
+}

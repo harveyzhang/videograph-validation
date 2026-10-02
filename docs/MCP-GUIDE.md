@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph` 0.4.0 · 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
+toolset: 2026-10-02 · server `videograph` 0.5.0 · 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评、案例库与上游来源）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
 
 > **定位（2026-10-02）：VideoGraph 是 LLM 的 After Effects。** 你（agent）是操作者：建工程、规划、写镜头、调节奏、渲染与自查；人在前端看片、提意见、对比、采用/拒绝。改完不要只看“没有报错”——用 §3「节奏与画面感知」的工具看运动、量节奏、看全片。
 
@@ -159,6 +159,20 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 **MCP prompts**：`direct_video({ projectId })`（必填工程 ID，读当前 creation skill，引导 next→claim→制作→真实证据→返工/交付；同一 agent 完成，不调用第二套模型）、`respond_to_feedback({ projectId? })`（§4 流程 + 自查要求）、`design_rhythm({ projectId, section? })`（节奏设计与自查流程）。读取 prompt 不是工程写入，也不替代 `project_director_next` 的当前事实与闸门。
 
 产物文件位于 `projects/<projectId>/<file>`（如 `artifacts/<key>.png`、`exports/<jobId>/pv.mp4`），同机 agent 可直接读取 PNG 做视觉检查。
+
+### 案例库与上游来源（FX-00）
+
+这些内容**不随本仓库分发**：`effects/sources.json` 只登记上游仓库、固定 commit、许可与署名；第一次调用时在本机从 GitHub 按固定 commit 下载到 `.cache/fx`，用 git blob 哈希校验，逐文件判定许可（不在白名单的不落盘），之后走缓存。不需要工程服务；首次需要能访问 github.com（API 匿名限额 60 次/小时，可设 `GITHUB_TOKEN`）。
+
+| 工具 | 必填参数 | 作用 / 返回 |
+|---|---|---|
+| `fx_sources` | — | 登记的来源：仓库、commit、许可状态、署名、第三方素材说明、本机缓存数 |
+| `casebook_list` | — | Code Video Casebook 的 31 个真实代码视频案例（id、标题）。做新片前先挑 1–3 个最接近的 |
+| `casebook_case` | `caseId` | 案例检索卡（一句话、规格、何时抄、架构、最值得抄的做法、坑、CoExp 行号导读）+ 源码清单 + 20 帧联系表图片 |
+| `casebook_search` | `query` | 正则检索，返回 `path:行号:内容`；`scope`：`cards`（默认）/ `coexp` / `source`（必须给 `cases`，按需下载源码）/ `all` |
+| `casebook_read` | `path` | 读文件（相对 casebook 根，如 `references/cases/oneink/CoExp.md`、`references/techniques.md`），`lines: "起:止"`，单次 ≤12k 字符 |
+
+**许可与边界**：案例库作者已口头授权使用其自有内容（书面许可待落地，不进入对外发布包）；字体、音乐音效、视频、真人照片等第三方素材不在下载范围。案例里的品牌名、成员信息、二维码属于原项目——参考结构、节奏和做法，做新片时换成用户自己的内容，事实不确定就问人。案例是别的技术栈（Python/Canvas/HyperFrames 等），借思路后按本平台引擎契约重写场景，不要把它们的代码原样塞进镜头。
 
 ## 4. 标准流程：响应人的修改意见
 

@@ -87,6 +87,11 @@ projects/<uuid>/
 | `project_contact_sheet` | `projectId` | 全片每镜头 1–3 帧（`ratios`，默认 `[0.45]`）拼图，标序号/标题/时间/段落/状态；无源码镜头画占位。看全片一致性、色彩推… |
 | `project_rhythm_report` | `projectId` | 顺序渲染目标时间段（范围参数同 filmstrip；`sampleFps` 10–60，默认 ≤30 秒用工程帧率、更长用 15），返回文本报… |
 | `craft_guide` | — | shotcraft 技法库节选（≤12k 字符）。`topic`：`shots / transitions / effects / media… |
+| `fx_sources` | — | 登记的来源：仓库、commit、许可状态、署名、第三方素材说明、本机缓存数 |
+| `casebook_list` | — | Code Video Casebook 的 31 个真实代码视频案例（id、标题）。做新片前先挑 1–3 个最接近的 |
+| `casebook_case` | `caseId` | 案例检索卡（一句话、规格、何时抄、架构、最值得抄的做法、坑、CoExp 行号导读）+ 源码清单 + 20 帧联系表图片 |
+| `casebook_search` | `query` | 正则检索，返回 `path:行号:内容`；`scope`：`cards`（默认）/ `coexp` / `source`（必须给 `cases… |
+| `casebook_read` | `path` | 读文件（相对 casebook 根，如 `references/cases/oneink/CoExp.md`、`references/tech… |
 
 硬规则：AI 不能接受意见。 只改目标：`project_shot_submit` 只作用于一个镜头并生成不可变的新源码文件；不要借响应一条意见顺手重写其他镜头。 保留原始意图：不要用 `project_shot_update` 把人的意见写进 `prompt` 覆盖原文；意见本身已单独保存。 锁定的镜头/转场必须由人解锁后才能修改；不要自行解锁来完成任务。 时间一律从分析数据推导（词起点、拍点），不在场景代码里硬编码秒数。 有未接受意见或 `needs-generation` 的镜头/转场时，`project_render` 会被拒绝，这是预期行为。
 <!-- END:generated-from-MCP-GUIDE -->

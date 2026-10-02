@@ -15,13 +15,14 @@ import { projectToolDefinitions, callProjectTool } from '../server/mcp-tools.ts'
 import { feedbackToolDefinitions, feedbackToolNames, callFeedbackTool, mcpToolResult } from '../server/mcp-feedback-tools.ts';
 import { aeToolDefinitions, aeToolNames, callAeTool } from '../server/mcp-ae-tools.ts';
 import { directorToolDefinitions, directorToolNames, callDirectorTool } from '../server/mcp-director-tools.ts';
+import { fxToolDefinitions, fxToolNames, callFxTool } from '../server/mcp-fx-tools.ts';
 
 // VideoGraph = LLM 的 After Effects：本 server 是 LLM 操作工程的唯一入口（工具定义见 ../server/mcp-*.ts）。
 // 旧演示视图的 shot_queue_*、shot_cards_*、pdoom_*、lyric_research_draft 工具已于 CLEANUP-01 移除。
 
 const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 const server = new Server(
-  { name: 'videograph', version: '0.4.0' },
+  { name: 'videograph', version: '0.5.0' },
   { capabilities: { tools: {}, resources: {}, prompts: {} } },
 );
 
@@ -30,12 +31,17 @@ function textResult(value: unknown, isError = false) {
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [...projectToolDefinitions, ...feedbackToolDefinitions, ...aeToolDefinitions, ...directorToolDefinitions],
+  tools: [...projectToolDefinitions, ...feedbackToolDefinitions, ...aeToolDefinitions, ...directorToolDefinitions, ...fxToolDefinitions],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const name = request.params.name;
   const args = request.params.arguments ?? {};
+  // FX：在 MCP 进程内执行（按需从上游下载），不需要工程服务；直接返回 MCP content（含案例联系表图片）。
+  if (fxToolNames.has(name)) {
+    try { return await callFxTool(name, args); }
+    catch (error) { return textResult({ error: String(error), hint: '首次使用需要能访问 github.com；GitHub API 匿名限额 60 次/小时，可设置 GITHUB_TOKEN' }, true); }
+  }
   const call = feedbackToolNames.has(name) ? callFeedbackTool
     : aeToolNames.has(name) ? callAeTool
     : directorToolNames.has(name) ? callDirectorTool
