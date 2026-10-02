@@ -10,7 +10,8 @@ const skillDir = join(root, 'skills/shotcraft');
 const guidePath = join(root, 'docs/MCP-GUIDE.md');
 const toolsPath = join(root, 'src/server/mcp-tools.ts');
 // FB-03 起工具定义分布在两个文件；指南一致性检查合并读取。
-const toolsCode = () => readFileSync(toolsPath, 'utf8') + '\n' + readFileSync(join(root, 'src/server/mcp-feedback-tools.ts'), 'utf8');
+// AE 冲刺起再加 mcp-ae-tools.ts（节奏表 / 帧序列 / 全片缩略图 / 节奏报告 / craft_guide）。
+const toolsCode = () => [toolsPath, join(root, 'src/server/mcp-feedback-tools.ts'), join(root, 'src/server/mcp-ae-tools.ts')].map((file) => readFileSync(file, 'utf8')).join('\n');
 const guideMissing = existsSync(guidePath) ? false : 'MCP-GUIDE.md 尚未提交（等集成者 INT-00），提交后本测试自动启用';
 
 function walk(dir, files = []) {
@@ -79,6 +80,11 @@ test('SOURCES.md 覆盖无许可与受限语料的处理声明', () => {
     assert.ok(sources.includes(marker), `SOURCES.md 缺少「${marker}」小节`);
   }
 });
-test('MCP resources / craft_guide / respond_to_feedback 工具注册（集成者合并 mcp-server.ts 后启用）', { skip: '等待集成者注册 resources/craft_guide/respond_to_feedback；届时改为断言 server capabilities 与 craft_guide 返回' }, () => {
-  assert.fail('占位断言不应被执行');
+test('MCP resources / craft_guide / prompts 已注册（AE-05；运行时行为见 scripts/tests/ae/ae-tools.test.mjs）', () => {
+  const serverCode = readFileSync(join(root, 'src/pdoom/mcp-server.ts'), 'utf8');
+  assert.match(serverCode, /capabilities: \{ tools: \{\}, resources: \{\}, prompts: \{\} \}/);
+  assert.match(serverCode, /ListResourcesRequestSchema/);
+  for (const prompt of ['respond_to_feedback', 'design_rhythm']) assert.match(serverCode, new RegExp(`${prompt}:`));
+  assert.match(toolsCode(), /name: 'craft_guide'/);
+  assert.match(readFileSync(guidePath, 'utf8'), /videograph:\/\/skills\/shotcraft/, '指南应列出 resources URI');
 });

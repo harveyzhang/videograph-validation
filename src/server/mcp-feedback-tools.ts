@@ -114,9 +114,10 @@ export async function callFeedbackTool(name: string, args: Record<string, unknow
 const artifactPattern = /^artifacts\/[a-f0-9]{64}\.png$/;
 /** stills 产物嵌入为 MCP image 内容；路径校验防穿越，读不到文件时保留文本里的路径不硬塞图片。 */
 function stillImageContents(value: unknown): McpContent[] {
-  const record = value as { projectId?: unknown; result?: { stills?: { images?: unknown } }; stills?: { images?: unknown } } | null;
+  const record = value as { projectId?: unknown; result?: { stills?: { images?: unknown }; images?: unknown }; stills?: { images?: unknown } } | null;
   if (!record || typeof record !== 'object') return [];
-  const images = (record.result?.stills?.images ?? record.stills?.images) as Array<{ file?: unknown }> | undefined;
+  // stills 的 result.stills.images；AE 工具（filmstrip/contact-sheet/rhythm）的 result.images。
+  const images = (record.result?.stills?.images ?? record.stills?.images ?? record.result?.images) as Array<{ file?: unknown }> | undefined;
   const projectId = typeof record.projectId === 'string' ? record.projectId : '';
   if (!Array.isArray(images) || !projectId) return [];
   const contents: McpContent[] = [];
@@ -131,8 +132,16 @@ function stillImageContents(value: unknown): McpContent[] {
   return contents;
 }
 
-/** 统一把 JSON 工具结果封装为 MCP content（含 stills 的 image 内容）。 */
+/**
+ * 统一把 JSON 工具结果封装为 MCP content（含 stills/AE 产物的 image 内容）。
+ * 结果里的长文本（节奏表、节奏报告、技法节选）单独作为一段原样文本，避免被 JSON 转义成一行。
+ */
 export function mcpToolResult(value: Record<string, unknown>): { content: McpContent[] } {
   const images = stillImageContents(value);
-  return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }, ...images] };
+  const result = value.result as Record<string, unknown> | undefined;
+  const longText = typeof value.text === 'string' ? value.text : typeof result?.text === 'string' ? result.text : null;
+  let structured: Record<string, unknown> = value;
+  if (typeof value.text === 'string') { const { text: _text, ...rest } = value; structured = rest; }
+  else if (result && typeof result.text === 'string') { const { text: _text, ...rest } = result; structured = { ...value, result: rest }; }
+  return { content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }, ...(longText ? [{ type: 'text' as const, text: longText }] : []), ...images] };
 }

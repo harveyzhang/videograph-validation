@@ -1,8 +1,8 @@
 ---
 name: shotcraft
-version: 1.1.1
+version: 1.2.0
 toolset: 2026-10-02
-description: 确定性节拍驱动代码视频的通用分镜/转场/特效/媒介风格技法库（从 pdoom-video 及 25 个 Opus 5.5 视频开源仓库蒸馏，平台无关）。当用户要为生成式音乐视频/动态影像设计分镜、转场、特效或视觉媒介风格（刻线版画、水彩笔刷、risograph、halftone、剪纸、火花、逐词卡拉OK、字体猛击、无限晶格、Droste、倒带循环…），要复刻某种视觉手法，或在使用 VideoGraph 平台（videograph-pdoom MCP 全引擎管线 / VideoGraph 工坊 draw(ctx,f,api) mini-engine 队列）制作 PV 时使用。关键词：分镜、转场、特效、镜头卡、PV、卡拉OK、刻线、版画、riso、笔刷、媒介模拟、spark、videograph、VideoGraph、工坊、opus。
+description: 确定性节拍驱动代码视频的通用分镜/转场/特效/媒介风格技法库（从 pdoom-video 及 25 个 Opus 5.5 视频开源仓库蒸馏，平台无关）。当用户要为生成式音乐视频/动态影像设计分镜、转场、特效或视觉媒介风格（刻线版画、水彩笔刷、risograph、halftone、剪纸、火花、逐词卡拉OK、字体猛击、无限晶格、Droste、倒带循环…），要复刻某种视觉手法，或在使用 VideoGraph 平台（videograph MCP 全引擎管线 / VideoGraph 工坊 draw(ctx,f,api) mini-engine 队列）制作 PV 时使用。关键词：分镜、转场、特效、镜头卡、PV、卡拉OK、刻线、版画、riso、笔刷、媒介模拟、spark、videograph、VideoGraph、工坊、opus。
 ---
 
 # shotcraft：确定性代码视频的分镜·转场·特效技法库
@@ -14,7 +14,7 @@ description: 确定性节拍驱动代码视频的通用分镜/转场/特效/媒�
 
 两个用途：
 1. **自由创作**：任何项目里设计分镜/转场/特效（本文 + 三个 references）。
-2. **VideoGraph 全引擎管线**（videograph-pdoom MCP，Scene 类 TS 场景）→ 先读
+2. **VideoGraph 全引擎管线**（videograph MCP，Scene 类 TS 场景）→ 先读
    `references/platform-videograph.md`。
 
 ## 五条通用法则（任何平台都先过这一关）
@@ -87,7 +87,9 @@ VideoGraph 两条管线的精确能力边界、契约与工作流见
 
 - **通用**：抽 5 帧（进度 0 / 0.25 / 0.45 / 0.75 / 末帧）静帧检查 + 类型检查/编译 +
   挑最运动的一段出短片段看动态。**静帧必须真的"看"**（渲染成图后逐张读），不能只看无报错。
-- **全引擎管线**：`project_validate`（后台编译+5 帧抽检）通过 ≠ 审美通过；导出前用
-  `project_preview` 人工过一遍，转场用 `project_transition_validate` 抽帧。
+- **全引擎管线**：`project_validate`（后台编译+5 帧抽检）通过 ≠ 审美通过。写镜头前读
+  `song_cue_sheet`（小节节奏表）；改完用 `project_filmstrip`（`around` 关键下拍）看起势与衰减、
+  `project_rhythm_report` 量下拍命中/偏移/死区/闪烁、`project_contact_sheet` 看全片强弱与一致性；
+  转场用 `project_transition_validate` 抽帧。参考好作品的基准：画面峰约 94% 落在拍/鼓点/词起点上，下拍命中约 38%。
 - **pdoom-video repo 本体**：`cd app && bun scripts/render.ts stills --t … --only <板>`
   （PNG 必须用 Read 看）、`sheet` 联络表、`video --from --to` 短片段。

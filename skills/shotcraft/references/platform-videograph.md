@@ -5,17 +5,17 @@
 
 | | 全引擎管线 |
 |---|---|
-| 入口 | `videograph-pdoom` MCP 的 `project_*` 工具 |
+| 入口 | `videograph` MCP（旧名 videograph-pdoom） 的 `project_*` 工具 |
 | 场景契约 | **Scene 类**（three.js + GLSL + Canvas2D 分层，pdoom 引擎同源） |
 | 工程 | `projects/<uuid>/engine/`（完整引擎拷贝）+ `project.sqlite` + `artifacts/`（验证 png/mp4）+ `exports/` |
 | 转场 | 引擎级（参数化配置）+ 镜头自转场 |
 | 产物 | 编译+5 帧抽检 → 预览 → 整片 MP4 导出 |
 
-判断方法：会话里挂着 `mcp__videograph-pdoom__project_*` 工具且用户在谈某个 PV 工程 → 本路线。
+判断方法：会话里挂着 `mcp__videograph__project_*`（或旧名 `mcp__videograph-pdoom__project_*`） 工具且用户在谈某个 PV 工程 → 本路线。
 
 ---
 
-## 全引擎管线（videograph-pdoom MCP）
+## 全引擎管线（videograph MCP）
 
 ### 工程结构
 
@@ -72,8 +72,13 @@ projects/<uuid>/
 | `project_preview` | `projectId` | 可选 `shotId / transitionId / version: current|before-feedback`。返回本机真实引擎播… |
 | `project_validate` | `projectId, shotId` | 后台编译 + 5 时间点抽检，返回 job；完成后镜头 `validation.thumb` 指向 `artifacts/<key>.png`… |
 | `project_render` | `projectId` | 可选 `fps: 24/30/60`、`samples: 1/4/12`。后台导出完整 MP4，冻结当前版本，命中分段缓存 |
-| `project_job_get` | `projectId` | 可选 `jobId`；省略则列出最近任务。看 `status / progress / error / result` |
+| `project_job_get` | `projectId` | 可选 `jobId`；省略则列出最近任务。看 `status / progress / error / result`。带 `waitSeco… |
 | `project_job_cancel` | `projectId, jobId` | 取消排队或运行中的任务 |
+| `song_cue_sheet` | `projectId` | 按小节的文本节奏表：时间、段落（▶段首）、能量 1–5（小节 rms 在全曲 p5–p95 中的位置）、每拍 2 格鼓点型（`K` kick … |
+| `project_filmstrip` | `projectId` | 一段连续帧拼成一张网格图（≤24 格），每格标 `时间 小节.拍 ●下拍 K S “词”`，下拍帧橙框。范围：`shotId` / `tran… |
+| `project_contact_sheet` | `projectId` | 全片每镜头 1–3 帧（`ratios`，默认 `[0.45]`）拼图，标序号/标题/时间/段落/状态；无源码镜头画占位。看全片一致性、色彩推… |
+| `project_rhythm_report` | `projectId` | 顺序渲染目标时间段（范围参数同 filmstrip；`sampleFps` 10–60，默认 ≤30 秒用工程帧率、更长用 15），返回文本报… |
+| `craft_guide` | — | shotcraft 技法库节选（≤12k 字符）。`topic`：`shots / transitions / effects / media… |
 
 硬规则：AI 不能接受意见。 只改目标：`project_shot_submit` 只作用于一个镜头并生成不可变的新源码文件；不要借响应一条意见顺手重写其他镜头。 保留原始意图：不要用 `project_shot_update` 把人的意见写进 `prompt` 覆盖原文；意见本身已单独保存。 锁定的镜头/转场必须由人解锁后才能修改；不要自行解锁来完成任务。 时间一律从分析数据推导（词起点、拍点），不在场景代码里硬编码秒数。 有未接受意见或 `needs-generation` 的镜头/转场时，`project_render` 会被拒绝，这是预期行为。
 <!-- END:generated-from-MCP-GUIDE -->

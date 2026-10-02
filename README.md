@@ -1,6 +1,6 @@
 # VideoGraph
 
-面向 ToB 产品宣发与音乐人 PV 的本地 AI 视频工程工作台。以仿 ComfyUI 的节点界面操作可复现工程，支持镜头级编辑、MCP 创作、人工修改意见和分段渲染。
+面向 ToB 产品宣发与音乐人 PV 的本地 AI 视频工程工作台——**LLM 的 After Effects**：LLM 经 MCP 建工程、写镜头、调节奏、渲染并用节奏/画面感知工具自查；前端是人看片、定位意见、对比与采用的审阅室。工程可复现，支持镜头级局部修改与分段渲染。
 
 ## 文档入口
 
@@ -18,7 +18,7 @@
 npm ci
 npm run service       # 本地工程服务：http://127.0.0.1:5191
 npm run dev           # 节点界面：http://127.0.0.1:5188/?view=project
-npm run mcp:pdoom     # MCP stdio 工具入口
+npm run mcp           # MCP stdio 工具入口（旧名 mcp:pdoom 仍可用）
 ```
 
 工程服务和开发服务分别运行于终端。先启动 service，再打开工程界面。用户素材、数据库、服务令牌与导出文件保留在本机，不提交 Git。

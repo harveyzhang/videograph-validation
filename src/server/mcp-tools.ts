@@ -33,7 +33,7 @@ export const projectToolDefinitions = withFeedbackResponsesSchema([
   { name: 'project_preview', description: '打开指定工程冻结版本的本机真实引擎预览，返回 URL。可指定 shotId 与 before-feedback 查看修改前版本；供人和 agent 视觉检查，不代表自动认可。', inputSchema: schema({ version: { type: 'string', enum: ['current', 'before-feedback'] } }, ['projectId']) },
   { name: 'project_validate', description: '后台验证指定真实镜头：加载引擎、编译并抽检 5 个时间点，保存静帧与诊断；返回 jobId，通过 project_job_get 查询，不代表逐帧/审美通过。', inputSchema: schema({}, ['projectId', 'shotId']) },
   { name: 'project_render', description: '后台导出完整 PV MP4：冻结版本，按镜头逐帧渲染、复用内容缓存、封装完整 BGM。返回任务，不阻塞 MCP 会话。', inputSchema: schema({ fps: { type: 'integer', enum: [24, 30, 60] }, samples: { type: 'integer', enum: [1, 4, 12] } }, ['projectId']) },
-  { name: 'project_job_get', description: '查询后台验证/导出任务进度、错误、缓存命中与产物地址；省略 jobId 列出工程最近任务。', inputSchema: schema({ jobId: { type: 'string' } }, ['projectId']) },
+  { name: 'project_job_get', description: '查询后台验证/导出/画面分析任务进度、错误、缓存命中与产物地址；省略 jobId 列出工程最近任务。给 waitSeconds（≤50，MCP 客户端常见超时 60 秒）则阻塞等待到任务结束或超时，省去反复轮询。', inputSchema: schema({ jobId: { type: 'string' }, waitSeconds: { type: 'integer', minimum: 0, maximum: 50 } }, ['projectId']) },
   { name: 'project_job_cancel', description: '取消指定排队或正在执行的后台渲染任务。已经完成的产物保留。', inputSchema: schema({ jobId: { type: 'string' } }, ['projectId', 'jobId']) },
 ]);
 
@@ -71,7 +71,7 @@ export async function callProjectTool(name: string, args: Record<string, unknown
   else if (name === 'project_preview') { path += '/preview'; body = { shotId: args.shotId, transitionId: args.transitionId, version: args.version }; }
   else if (name === 'project_validate') { path += '/validate'; body = { shotId: args.shotId }; }
   else if (name === 'project_render') { path += '/render'; body = { fps: args.fps, samples: args.samples }; }
-  else if (name === 'project_job_get') path += `/jobs${args.jobId ? '/' + encodeURIComponent(String(args.jobId)) : ''}`;
+  else if (name === 'project_job_get') path += `/jobs${args.jobId ? '/' + encodeURIComponent(String(args.jobId)) + (Number(args.waitSeconds) > 0 ? `?wait=${Math.min(50, Number(args.waitSeconds))}` : '') : ''}`;
   else if (name === 'project_job_cancel') { path += `/jobs/${encodeURIComponent(String(args.jobId))}/cancel`; body = {}; }
   const token = readFileSync(process.env.VIDEOGRAPH_SERVICE_TOKEN_FILE ?? fileURLToPath(new URL('../../.cache/service-token', import.meta.url)), 'utf8');
   const response = await fetch(base.replace(/\/$/, '') + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(120000) });

@@ -4,7 +4,9 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具（含 FB-02/FB-03 意见与画面工具、SONG-05 歌曲分析与规划工具）；§6 为计划中工具，未实现前不要调用。
+toolset: 2026-10-02 · server `videograph` 0.3.0 · 状态：§3 为已实现工具（含 FB-02/FB-03 意见与画面工具、SONG-05 歌曲分析与规划工具、LLM-AE 节奏与画面感知工具）；另有 MCP resources 与 prompts（§3 末尾）；§6 为计划中工具，未实现前不要调用。
+
+> **定位（2026-10-02）：VideoGraph 是 LLM 的 After Effects。** 你（agent）是操作者：建工程、规划、写镜头、调节奏、渲染与自查；人在前端看片、提意见、对比、采用/拒绝。改完不要只看“没有报错”——用 §3「节奏与画面感知」的工具看运动、量节奏、看全片。
 
 > CLEANUP-01（2026-10-01）：旧演示视图（单镜头工坊 / P(DOOM) 教学）的 `shot_queue_*`、`shot_cards_*`、`pdoom_*`、`lyric_research_draft` 工具已随代码一并移除；本指南只覆盖真实工作台的 `project_*` 工具。
 
@@ -12,7 +14,7 @@ toolset: 2026-10-02 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实
 
 ```sh
 npm run service      # 工程服务 127.0.0.1:5191，写 .cache/service-token
-npm run mcp:pdoom    # MCP stdio server（由 MCP 客户端拉起，一般不手动运行）
+npm run mcp          # MCP stdio server（由 MCP 客户端拉起，一般不手动运行；旧名 mcp:pdoom 仍可用）
 ```
 
 MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 HTTP + 服务令牌调用 5191，不直接写数据库或工程文件。工具返回 `工程服务需要运行` 时，先启动 service。
@@ -35,6 +37,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 
 - 并行实例使用独立端口与令牌：同时设置 `VIDEOGRAPH_SERVICE_URL` 和 `VIDEOGRAPH_SERVICE_TOKEN_FILE`，与该实例的 service 一致（见 `.env.example`）。
 - 工具列表在客户端会话启动时加载；MCP 代码更新后需重连 MCP 才能看到新工具。
+- 渲染类工具可带 `waitSeconds`（≤50）在一次调用内等待结果；上限 50 秒是为了不触发 MCP 客户端常见的 60 秒请求超时。
 
 ## 2. 核心概念
 
@@ -115,8 +118,25 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_preview` | `projectId` | 可选 `shotId / transitionId / version: current\|before-feedback`。返回本机真实引擎播放器 `url` 与 `range`。供有浏览器能力的人/agent 查看 |
 | `project_validate` | `projectId, shotId` | 后台编译 + 5 时间点抽检，返回 job；完成后镜头 `validation.thumb` 指向 `artifacts/<key>.png`（**单张**缩略图） |
 | `project_render` | `projectId` | 可选 `fps: 24/30/60`、`samples: 1/4/12`。后台导出完整 MP4，冻结当前版本，命中分段缓存 |
-| `project_job_get` | `projectId` | 可选 `jobId`；省略则列出最近任务。看 `status / progress / error / result` |
+| `project_job_get` | `projectId` | 可选 `jobId`；省略则列出最近任务。看 `status / progress / error / result`。带 `waitSeconds`（≤50）则阻塞到任务结束或超时，不用反复轮询 |
 | `project_job_cancel` | `projectId, jobId` | 取消排队或运行中的任务 |
+
+### 节奏与画面感知（LLM-AE，AE-01～05）
+
+规划镜头前读节奏表；改完镜头后用 filmstrip 看动作、rhythm_report 量节奏、contact_sheet 看全片。filmstrip / contact_sheet / rhythm_report 都是只读后台任务（新歌工程需 `planned`），默认在本次调用内等待 25 秒（`waitSeconds` ≤50），超时返回 job，再用 `project_job_get` 的 `waitSeconds` 等待；完成后以 MCP image 内容返回图片，长文本作为单独一段文本返回。
+
+| 工具 | 必填参数 | 作用 / 返回 |
+|---|---|---|
+| `song_cue_sheet` | `projectId` | 按小节的文本节奏表：时间、段落（▶段首）、能量 1–5（小节 rms 在全曲 p5–p95 中的位置）、每拍 2 格鼓点型（`K` kick / `S` snare / `X` 同时 / `.`）、歌词、`↑↑` 爆发 / `↓↓` 回落 / `⇗` 蓄力、现有切点 `✂n(转场)@t`。可选 `start / end`。无下拍按 4 拍推算、无拍点按 2 秒分块（都会在表头注明） |
+| `project_filmstrip` | `projectId` | 一段连续帧拼成一张网格图（≤24 格），每格标 `时间 小节.拍 ●下拍 K S “词”`，下拍帧橙框。范围：`shotId` / `transitionId`（切点前后各 1 秒）/ `start,end` / 全片；取帧：默认均匀 6–24 帧、`around: t` + `frames`（前后各 1–11 帧，看冲击起势与衰减）、`sampleFps`。可选 `thumbWidth`（160–480）、`columns` |
+| `project_contact_sheet` | `projectId` | 全片每镜头 1–3 帧（`ratios`，默认 `[0.45]`）拼图，标序号/标题/时间/段落/状态；无源码镜头画占位。看全片一致性、色彩推进、镜头雷同、强弱起伏 |
+| `project_rhythm_report` | `projectId` | 顺序渲染目标时间段（范围参数同 filmstrip；`sampleFps` 10–60，默认 ≤30 秒用工程帧率、更长用 15），返回文本报告 + 对照图：下拍/强 kick/强 snare 命中率与中位偏移（正=画面滞后）、高能量小节下拍命中率、画面峰在拍上的比例、与鼓点包络的相关与最佳偏移、死区、闪烁（线性亮度近似 WCAG，>3 次/秒告警）、切点离拍距离、逐小节“音乐能量 vs 画面运动”。报告分「问题（通常该修）」与「风格提示（确认是否有意）」。全片 15fps 约 5–6 分钟（瓶颈是 1080p 真实渲染），优先按镜头/段落跑；采样帧有缓存，同一版本重跑很快 |
+| `craft_guide` | — | shotcraft 技法库节选（≤12k 字符）。`topic`：`shots / transitions / effects / media-styles / pipeline / platform`，省略为总览；`query` 按关键词筛小节。不需要工程服务 |
+
+**参考基准**（pdoom 参考复现片，公认的好作品；详见 ROADMAP AE-04）：画面峰约 94% 落在拍/鼓点/词起点上（中位偏移 25ms），全片下拍命中约 38%——不需要每个下拍都砸，但大变化应当在拍上；“问题”栏只报出闪烁（终段副歌字块整屏黑白橙交替，7 次/秒），死区与连续不跟拍都归为“风格提示”。画面运动等级 1–5 以参考片全片小节运动的五分位（0.014/0.021/0.033/0.049）为刻度。
+
+**MCP resources**：`videograph://docs/mcp-guide`（本文件）、`videograph://skills/shotcraft/SKILL.md`、`videograph://skills/shotcraft/references/<name>.md`。
+**MCP prompts**：`respond_to_feedback({ projectId? })`（§4 流程 + 自查要求）、`design_rhythm({ projectId, section? })`（节奏设计与自查流程）。
 
 产物文件位于 `projects/<projectId>/<file>`（如 `artifacts/<key>.png`、`exports/<jobId>/pv.mp4`），同机 agent 可直接读取 PNG 做视觉检查。
 
@@ -132,7 +152,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 4. **改代码**：在当前源码基础上修改，遵守引擎契约与 shotcraft 技法（见 §7）；只改意见指向的部分，`preserve` 列表（歌词时序、Logo、镜头长度等）保持不变。意图含糊先 `project_feedback_ask` 澄清。
 5. **提交**：`project_shot_submit`，`expectedInputRevision` 取刚读到的值，`feedbackResponses: [{ feedbackId, outcome, how }]` 只列这次**真正处理了**的意见（partial 必须写 how），`summary` 写清改了什么。
 6. **验证**：`project_validate` → 轮询 `project_job_get` 直到 `done/error`。失败时读 `error`，修正后重新提交（最多两轮，仍失败就停下来报告）。
-7. **自查**：读新缩略图 / 重取 stills，确认意见被处理、保留项没坏、其他镜头的 `codeHash` 没变。
+7. **自查**：读新缩略图 / 重取 stills，确认意见被处理、保留项没坏、其他镜头的 `codeHash` 没变。涉及动作/节奏的意见（`aspect: motion|timing`）再跑 `project_filmstrip`（`around` = 锚点）与 `project_rhythm_report`（`shotId`），把结论写进 `how`。
 8. **交接给人**：回复中写明处理了哪些意见、如何处理、哪些没有处理及原因。然后停止：采用或拒绝由人在界面完成（AI 不能接受意见）。
 
 转场意见同理：`project_transition_get` → `project_transition_configure`（带 `addressedFeedbackIds`）→ `project_transition_validate`。
@@ -146,9 +166,10 @@ create_from_audio → 轮询 project_get 至 analysis-draft → song_analysis_ge
 1. `project_create_from_audio`；每隔几秒 `project_get`，直到 `status` 为 `analysis-draft`（`analysis-failed` 就停下报告 `analysis.error`）。
 2. `song_analysis_get` 核对 bpm、下拍、段落、歌词。歌词误听用 `song_lyrics_submit` 改；节拍明显错误（如 bpm 翻倍）先报告给人，不要硬规划。
 3. `song_analysis_confirm`（agent 确认会留痕 `confirmedBy: mcp`，回复里说明你核对了什么）。
-4. `project_plan_submit`：按段落/歌词锚点切镜，`prompt` 写清每镜的创作意图。
+4. 先读 `song_cue_sheet`，再 `project_plan_submit`：按段落/歌词锚点切镜（切在下拍或段首），`prompt` 写清每镜的创作意图与节奏角色（蓄力/爆发/留白）。
 5. 每个镜头 `project_shot_source`：未生成镜头返回 `template: true` 的通用窗口模板（只用 `lyrics.linesIn`、拍点与包络，不用 `ly.get('原句')`）。在模板基础上写场景，`project_shot_submit` 后 `project_validate`。有歌词的镜头同时用 `project_shot_update` 写 `lyricPlan`。
-6. 全部镜头 `ready` 后 `project_render`；成片音轨为工程音频，时长 = 曲长。
+6. 导出前：`project_contact_sheet` 看全片，按段落跑 `project_rhythm_report`，修掉「问题」一栏（离拍、偏移、死区、闪烁、切在拍外）。
+7. 全部镜头 `ready` 后 `project_render`；成片音轨为工程音频，时长 = 曲长。
 
 ## 5. 常见错误与陷阱
 
@@ -170,7 +191,6 @@ create_from_audio → 轮询 project_get 至 analysis-draft → song_analysis_ge
 
 | 名称 | 预期作用 |
 |---|---|
-| `craft_guide` + MCP resources/prompts | 通过 MCP 读取 shotcraft 技法与“按意见改镜头”流程模板 |
 | `song_analysis_run / song_analysis_patch` | 运行固定分析阶段、提交节拍/段落修正（标 mcp 来源） |
 
 实现后：把条目移入 §3，更新 §4 流程，并修改 toolset 版本行。

@@ -10,6 +10,7 @@ import { startReferenceServer } from './reference-server.mjs';
 import { feedbackTargetWindow } from './feedback.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 import { startAnalysisWorker } from './analysis-jobs.mjs';
+import { cueSheet } from './rhythm.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
 const allowedOrigins = new Set((process.env.VIDEOGRAPH_STUDIO_ORIGINS ?? 'http://127.0.0.1:5188,http://localhost:5188').split(',').map((origin) => origin.trim()).filter(Boolean));
@@ -42,13 +43,74 @@ function pump() {
     pump();
   });
 }
+// AE-02/03/04：只读的画面/节奏分析任务。参数在入队时校验并展开为确定的时间点，渲染进程只执行。
+const AE_KINDS = ['filmstrip', 'contact-sheet', 'rhythm'];
+function aeRange(project, options) {
+  const duration = project.song?.duration ?? Math.max(...project.shots.map((shot) => shot.end));
+  if (options.shotId) {
+    const shot = project.shots.find((entry) => entry.id === options.shotId);
+    if (!shot) throw new ProjectError('shot not found', 404);
+    return { start: shot.start, end: shot.end, label: `镜头 ${shot.id}`, shots: [shot] };
+  }
+  if (options.transitionId) {
+    const transition = project.transitions.find((entry) => entry.id === options.transitionId);
+    if (!transition) throw new ProjectError('transition not found', 404);
+    const { left, right } = transitionPair(project, transition);
+    const window = transitionWindow(project, transition);
+    const start = Math.max(left.start, window.start - 1), end = Math.min(right.end, window.end + 1);
+    return { start, end, label: `转场 ${transition.id}`, shots: [left, right] };
+  }
+  const start = Math.max(0, options.start ?? 0), end = Math.min(duration, options.end ?? duration);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end - start < 0.05) throw new ProjectError('start/end 必须构成有效时间段');
+  return { start, end, label: options.start === undefined && options.end === undefined ? '全片' : `${start.toFixed(2)}–${end.toFixed(2)}s`,
+    shots: project.shots.filter((shot) => shot.end > start && shot.start < end) };
+}
+function aeInput(project, kind, options) {
+  const fps = project.output.fps;
+  const intIn = (value, fallback, min, max, name) => {
+    const result = value ?? fallback;
+    if (!Number.isInteger(result) || result < min || result > max) throw new ProjectError(`${name} 必须是 ${min}..${max} 的整数`);
+    return result;
+  };
+  if (kind === 'contact-sheet') {
+    const ratios = options.ratios ?? [0.45];
+    if (!Array.isArray(ratios) || !ratios.length || ratios.length > 3 || !ratios.every((ratio) => Number.isFinite(ratio) && ratio >= 0 && ratio <= 1)) throw new ProjectError('ratios 必须是 1–3 个 0..1 的数');
+    return { ratios, thumbWidth: intIn(options.thumbWidth, project.shots.length * ratios.length > 24 ? 240 : 320, 160, 480, 'thumbWidth'),
+      columns: intIn(options.columns, ratios.length > 1 ? ratios.length * 2 : 6, 1, 12, 'columns') };
+  }
+  const range = aeRange(project, options);
+  const missing = range.shots.filter((shot) => !shot.module).map((shot) => shot.id);
+  if (missing.length) throw new ProjectError(`这些镜头还没有源码：${missing.join(', ')}；先 project_shot_submit`, 409);
+  const frame = (t) => Math.round(t * fps) / fps;
+  if (kind === 'filmstrip') {
+    let times;
+    if (options.around !== undefined) {
+      if (!Number.isFinite(options.around) || options.around < range.start || options.around >= range.end) throw new ProjectError('around 必须落在目标时间段内');
+      const half = intIn(options.frames, 5, 1, 11, 'frames');
+      times = Array.from({ length: half * 2 + 1 }, (_, i) => frame(options.around) + (i - half) / fps);
+    } else if (options.sampleFps !== undefined) {
+      if (!Number.isFinite(options.sampleFps) || options.sampleFps <= 0 || options.sampleFps > fps) throw new ProjectError(`sampleFps 必须在 (0, ${fps}]`);
+      times = [];
+      for (let t = range.start; t < range.end - 1e-6; t += 1 / options.sampleFps) times.push(t);
+    } else {
+      const count = Math.min(24, Math.max(6, Math.round((range.end - range.start) * 4)));
+      times = Array.from({ length: count }, (_, i) => range.start + (range.end - range.start) * i / count);
+    }
+    times = [...new Set(times.map(frame).filter((t) => t >= range.start - 1e-6 && t < range.end - 1e-6).map((t) => +t.toFixed(4)))];
+    if (!times.length || times.length > 24) throw new ProjectError(`帧数 ${times.length} 超出 1..24：缩小时间段或降低 sampleFps`);
+    return { times, label: options.around !== undefined ? `${range.label === '全片' ? '' : range.label + ' · '}around ${options.around}s` : range.label, thumbWidth: intIn(options.thumbWidth, 320, 160, 480, 'thumbWidth'), columns: intIn(options.columns, Math.min(6, times.length), 1, 12, 'columns') };
+  }
+  const sampleFps = intIn(options.sampleFps, range.end - range.start > 30 ? 15 : fps, 10, 60, 'sampleFps');
+  if ((range.end - range.start) * sampleFps > 6000) throw new ProjectError('采样帧过多（>6000）：缩小时间段或降低 sampleFps');
+  return { start: range.start, end: range.end, sampleFps, label: range.label };
+}
 function enqueue(projectId, kind, options) {
   const project = readProject(projectId);
-  if (!['validate', 'validate-transition', 'export', 'stills'].includes(kind)) throw new ProjectError('invalid job kind');
+  if (!['validate', 'validate-transition', 'export', 'stills', ...AE_KINDS].includes(kind)) throw new ProjectError('invalid job kind');
   if (kind === 'validate-transition' && !project.transitions.some((transition) => transition.id === options.transitionId)) throw new ProjectError('transition not found', 404);
   if (kind === 'validate' && !project.shots.some((shot) => shot.id === options.shotId)) throw new ProjectError('shot not found', 404);
   if (kind === 'export' && [...project.shots, ...project.transitions].some((target) => (target.feedback ?? []).some((note) => note.status !== 'accepted'))) throw new ProjectError('存在未接受的镜头或转场意见：请先配置/改写、校验并确认采用。', 409);
-  if (['validate', 'export', 'stills'].includes(kind) && project.status && project.status !== 'planned') throw new ProjectError(`工程还在 ${project.status} 阶段：先完成分析确认与镜头规划`, 409);
+  if (['validate', 'export', 'stills', ...AE_KINDS].includes(kind) && project.status && project.status !== 'planned') throw new ProjectError(`工程还在 ${project.status} 阶段：先完成分析确认与镜头规划`, 409);
   if (kind === 'validate' && !project.shots.find((shot) => shot.id === options.shotId).module) throw new ProjectError('镜头还没有源码：先 project_shot_submit', 409);
   if (kind === 'export' && project.shots.some((shot) => !shot.module || shot.status === 'needs-generation')) throw new ProjectError('有镜头尚未生成源码（needs-generation）', 409);
   if (kind === 'export' && project.transitions.some((transition) => transition.status === 'needs-generation')) throw new ProjectError('有转场指导尚未落实为效果配置', 409);
@@ -78,10 +140,11 @@ function enqueue(projectId, kind, options) {
     if (!Number.isInteger(width) || width < 320 || width > 1920) throw new ProjectError('width 必须是 320..1920 的整数像素');
     stills = { targetKind, targetId: target.id, times, version: options.version === 'before-feedback' ? 'before-feedback' : 'current', width };
   }
-  const fps = options.fps ?? project.output.fps;
-  const samples = options.samples ?? project.output.samples;
+  const ae = AE_KINDS.includes(kind) ? aeInput(project, kind, options) : null;
+  const fps = AE_KINDS.includes(kind) ? project.output.fps : options.fps ?? project.output.fps;
+  const samples = AE_KINDS.includes(kind) ? 1 : options.samples ?? project.output.samples;
   if (![24, 30, 60].includes(fps) || ![1, 4, 12].includes(samples)) throw new ProjectError('fps supports 24/30/60; samples supports 1/4/12');
-  const job = { id: randomUUID(), projectId, kind, status: 'queued', progress: 0, detail: '等待渲染进程', createdAt: Date.now(), input: { project, shotId: options.shotId, transitionId: options.transitionId, fps, samples, ...(stills ? { stills } : {}) } };
+  const job = { id: randomUUID(), projectId, kind, status: 'queued', progress: 0, detail: '等待渲染进程', createdAt: Date.now(), input: { project, shotId: options.shotId, transitionId: options.transitionId, fps, samples, ...(stills ? { stills } : {}), ...(ae ? { ae } : {}) } };
   saveJob(projectId, job);
   queue.push({ projectId, jobId: job.id });
   pump();
@@ -89,7 +152,18 @@ function enqueue(projectId, kind, options) {
 }
 function publicJob(job) {
   const { input, ...result } = job;
-  return { ...result, inputRevision: input.project.revision, shotId: input.shotId, transitionId: input.transitionId, fps: input.fps, samples: input.samples, ...(input.stills ? { stills: input.stills } : {}) };
+  if (!input) return result; // 分析任务没有渲染输入
+  return { ...result, inputRevision: input.project.revision, shotId: input.shotId, transitionId: input.transitionId, fps: input.fps, samples: input.samples, ...(input.stills ? { stills: input.stills } : {}), ...(input.ae ? { ae: input.ae } : {}) };
+}
+// AE-06：GET 任务时可阻塞等待到结束（最多 50 秒，留余量给 MCP 客户端常见的 60 秒请求超时），减少 agent 轮询回合。
+async function waitJob(projectId, jobId, seconds) {
+  const deadline = Date.now() + Math.min(50, Math.max(0, seconds)) * 1000;
+  let job = readJob(projectId, jobId);
+  while (!['done', 'error', 'cancelled', 'interrupted'].includes(job.status) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    job = readJob(projectId, jobId);
+  }
+  return job;
 }
 async function body(req, limit = 1000000) {
   const buffers = []; let size = 0;
@@ -134,7 +208,7 @@ const server = createServer(async (req, res) => {
     }
     const artifactRead = req.method === 'GET' && parts[0] === 'projects' && parts[2] === 'files';
     if (url.pathname !== '/health' && !artifactRead && req.headers.authorization !== `Bearer ${serviceToken}`) throw new ProjectError('local service authorization required', 401);
-    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v4-song', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'reference fingerprint import + SONG analyzer for new audio' }); return; }
+    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v5-llm-ae', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'reference fingerprint import + SONG analyzer for new audio' }); return; }
     if (url.pathname === '/projects' && req.method === 'GET') { json(res, { projects: listProjects() }); return; }
     if (url.pathname === '/projects' && req.method === 'POST') {
       const input = await body(req);
@@ -167,8 +241,9 @@ const server = createServer(async (req, res) => {
     if (parts[0] !== 'projects' || !safeId(parts[1])) throw new ProjectError('route not found', 404);
     const id = parts[1];
     if (parts.length === 2 && req.method === 'GET') { json(res, readProject(id)); return; }
-    if (parts[2] === 'jobs' && req.method === 'GET') {
-      json(res, parts[3] ? publicJob(readJob(id, parts[3])) : { jobs: listJobs(id).map(publicJob) }); return;
+    if (parts[2] === 'jobs' && parts.length <= 4 && req.method === 'GET') {
+      const wait = Number(url.searchParams.get('wait') ?? 0);
+      json(res, parts[3] ? publicJob(wait > 0 ? await waitJob(id, parts[3], wait) : readJob(id, parts[3])) : { jobs: listJobs(id).map(publicJob) }); return;
     }
     if (parts[2] === 'jobs' && parts[4] === 'cancel' && req.method === 'POST') {
       const job = readJob(id, parts[3]);
@@ -178,6 +253,14 @@ const server = createServer(async (req, res) => {
     }
     if (parts[2] === 'validate' && req.method === 'POST') { json(res, enqueue(id, 'validate', await body(req)), 202); return; }
     if (parts[2] === 'stills' && req.method === 'POST') { json(res, enqueue(id, 'stills', await body(req)), 202); return; }
+    if (AE_KINDS.includes(parts[2]) && req.method === 'POST') { json(res, enqueue(id, parts[2], await body(req)), 202); return; }
+    if (parts[2] === 'cue-sheet' && req.method === 'GET') {
+      const project = readProject(id);
+      if (!project.song) throw new ProjectError(`工程还在 ${project.status ?? '未知'} 阶段，没有音乐分析`, 409);
+      const number = (key) => (url.searchParams.has(key) ? Number(url.searchParams.get(key)) : undefined);
+      const sheet = cueSheet(project.song, { start: number('start') ?? 0, end: number('end') ?? Infinity, shots: project.shots, transitions: project.transitions });
+      json(res, { projectId: id, revision: project.revision, text: sheet.text, grid: sheet.grid, bars: sheet.bars.length }); return;
+    }
     if (parts[2] === 'render' && req.method === 'POST') { json(res, enqueue(id, 'export', await body(req)), 202); return; }
     if (parts[2] === 'song' && parts[3] === 'analysis' && req.method === 'GET') { json(res, getSongAnalysis(id, url.searchParams)); return; }
     if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'confirm' && req.method === 'POST') { json(res, confirmSongAnalysis(id, (await body(req)).author ?? 'human')); return; }

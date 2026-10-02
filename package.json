@@ -10,7 +10,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "audit": "node scripts/audit-all.mjs",
-    "mcp:pdoom": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings src/pdoom/mcp-server.ts"
+    "mcp": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings src/pdoom/mcp-server.ts",
+    "mcp:pdoom": "npm run mcp"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",

@@ -38,7 +38,9 @@ export interface VideoProject {
   revision: number;
   engineHash: string;
   audio: { name: string; hash: string };
-  analysis: { source: string; note: string };
+  /** 新歌工程的阶段状态（SONG-05）；参考导入工程没有该字段。 */
+  status?: 'analysis-pending' | 'analysis-failed' | 'analysis-draft' | 'analysis-confirmed' | 'planned';
+  analysis: { source: string; note: string; error?: string; confirmedBy?: 'human' | 'mcp' };
   song: { song: string; duration: number; bpm: number };
   output: { fps: number; samples: number };
   credits: string;
@@ -49,7 +51,7 @@ export interface StillsImage { t: number; file: string }
 export interface StillsSummary { targetKind: 'shot' | 'transition'; targetId: string; times: number[]; version: 'current' | 'before-feedback'; width: number }
 export interface ProjectJob {
   id: string;
-  kind: 'validate' | 'validate-transition' | 'export' | 'stills';
+  kind: 'validate' | 'validate-transition' | 'export' | 'stills' | 'filmstrip' | 'contact-sheet' | 'rhythm' | 'analysis';
   status: string;
   progress: number;
   detail?: string;

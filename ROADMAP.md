@@ -5,13 +5,15 @@
 
 ## 一、产品目标与不变原则
 
-服务 **ToB 产品宣发** 与 **C 端音乐人 PV**。以 `pdoom-video` 这类优秀 AI 创作工程为参照，做仿 ComfyUI 界面的创作产品，使工程可以稳定复现，人可以准确操作其中的镜头。
+服务 **ToB 产品宣发** 与 **C 端音乐人 PV**。以 `pdoom-video` 这类优秀 AI 创作工程为参照，使工程可以稳定复现、局部修改。
+
+**定位（2026-10-02 用户确认）：VideoGraph 是 LLM 的 After Effects。** LLM 是操作者，经 MCP 建合成、写镜头、调节奏、渲染与自查；前端是**给人看片和提修改意见的审阅室**（看、定位、对比、采用/拒绝），不是让人手工编辑的 AE。能力优先补给 LLM：让它看得见运动、量得出节奏、读得懂音乐结构、能局部修改；审美由人通过意见与采用来裁决。
 
 当前端到端目标：只提供该参考工程的 BGM，由 agent 通过 MCP 创建工程、操作镜头、校验预览，最终导出完整 PV。工程复现与“从零原创”必须区分；审美上的满意需要成片反馈，不能用“没有报错”代替“完美”。
 
 **用户于 2026-09-30 确认的执行顺序：先完整复现 → 再用同一首歌独立创作自己的 PV → 对人类与 AI 共用的整个产品做交叉检查、修复问题并持续优化。** 两支成片使用独立工程与明确署名；不能只修改提示词、复用原画面就宣称完成独立创作。
 
-1. **节点画布是核心，不是装饰。** 节点/连线对应真实输入、计算、产物和依赖；镜头带、时间线、参数面板和预览只是协同视图。
+1. **LLM 是操作者，人是审阅者。** 工程结构、工具与反馈都为 LLM 精确操作而设计；前端以带音乐的全片播放、时间线、定位意见、版本对比为主。节点画布降为结构视图（依赖关系说明），不再是核心交互（2026-10-02 前为“节点画布是核心”）。
 2. **人工意见是一等输入。** AI 生成整个工程后，必须按镜头/共享资源/风格/输出拆分，方便人添加针对性意见，不必推翻整片。
 3. **保存工程而不只是提示词。** 源码、素材、字体、参数、时间轴、依赖版本、种子、引擎与渲染设置均可追踪。
 4. **真实工程的表现力不能被模板限制。** Canvas 模板只用于测试/兜底；原始 Three.js、GLSL、字体轮廓、后期能力要能够接入。
@@ -69,7 +71,60 @@
 
 ## 三、最近要按顺序完成的任务
 
-### 当前冲刺（2026-10-01 起，最高优先）：人工意见 → MCP 定位 → 改写视频代码
+### LLM-AE 冲刺（2026-10-02 起，最高优先；分支 `feat/llm-ae`，集成者本会话）
+
+目标：补齐 LLM 作为“AE 操作者”的感知与控制能力，重点是**节奏把控**和**审美自查**；前端转为审阅室。顺序：`AE-P0 → AE-P1 → AE-P2 → AE-P3`，每个工作包完成后在此记录命令与结果。
+
+#### AE-P0 感知工具（LLM 的眼睛、耳朵和尺子）
+
+| 编号 | 交付 | 验收 |
+|---|---|---|
+| AE-01 | `song_cue_sheet`：按小节输出文本节奏表（时间、段落、能量 1–5、拍内鼓点型 `K`/`S`/`.`、人声、歌词、镜头/转场边界、能量突变标记），可按时间段读取 | 纯函数单测：小节划分、能量分级、鼓点量化、无歌词/无下拍回退；参考工程实跑 |
+| AE-02 | `project_filmstrip`：一段连续帧拼成一张带时间/拍号/下拍标记的网格图（≤24 格，或 `around` 某时刻 ±N 帧） | 真实服务+渲染进程跑通，返回 MCP image |
+| AE-03 | `project_contact_sheet`：全片每镜头 1–3 帧拼图，标镜头序号/标题/段落/时长；未生成镜头画占位 | 同上 |
+| AE-04 | `project_rhythm_report`：顺序渲染低分辨率帧，算画面运动能量与亮度，对照下拍/kick/snare 计算命中率、超前滞后、相关系数（含最佳偏移）、死区、过忙、段落能量跟随、闪烁风险；返回文本报告 + 能量对照图 | 指标纯函数单测（合成序列）；真实服务跑通；对 pdoom 参考片跑一次作为“好作品”基准写入此处 |
+| AE-05 | 技法库经 MCP 提供：`craft_guide` 工具、`videograph://` resources、`respond_to_feedback` / `design_rhythm` prompts | mcp-guide-sync 占位测试改为真实断言 |
+| AE-06 | 工具好用性：`project_job_get` 支持 `waitSeconds` 阻塞等待；MCP server 更名 `videograph`（保留 `mcp:pdoom` 脚本别名） | 单测/冒烟 |
+| AE-07 | 清理：构建修复（`VideoProject` 补 `status`/`analysis.error`/`confirmedBy` 可选类型）；删除与本文件重复的四份状态文档 | `npm run build` 通过 |
+
+**AE-P0 交付记录（2026-10-02，集成者，分支 `feat/llm-ae`，独立 worktree `../vg-llm-ae`，未提交）**
+
+- 状态：AE-01～07 ✅ 已写代码 + 已运行验证（夹具引擎全自动；真实 pdoom 引擎在独立实例 5391 上实跑）。**人工未验收**：节奏指标与图片对 LLM 创作的实际帮助，要在《THE LAST AUDIT》上用真实 agent 试用后由人判断。
+- 新文件：`src/server/rhythm.mjs`（节奏表与节奏报告纯函数）、`src/server/ae-page.mjs`（渲染页内采样/拼图/画图）、`src/server/mcp-ae-tools.ts`（5 个 MCP 工具）、`scripts/tests/ae/rhythm.test.mjs`（13 项）、`scripts/tests/ae/ae-tools.test.mjs`（8 项真实 stdio + 服务 + Edge 渲染）、`scripts/ae-reference-baseline.mjs`（参考片基准脚本）。
+- 接线：`render-worker.mjs` 新任务 `filmstrip / contact-sheet / rhythm`（只读、内容寻址缓存；节奏采样帧 `.gray` 与报告分离，指标升级 `RHYTHM_VERSION` 只重算不重渲）；`index.mjs` 入队校验、`GET /projects/:id/cue-sheet`、`GET .../jobs/:jid?wait=`（≤50s），apiVersion `project-service/v5-llm-ae`；`mcp-server.ts` 更名 `videograph` 0.3.0，注册 resources（指南 + shotcraft）与 prompts（`respond_to_feedback`、`design_rhythm`）；`package.json` 新增 `npm run mcp`（`mcp:pdoom` 为别名）；`api.ts` 补 `status/analysis.error/confirmedBy` 可选类型（另一会话未提交的 `SongStagePanel.tsx` 已验证可编译）。
+- 文档：MCP-GUIDE（toolset 行、§3 新小节、§4/新歌流程自查步骤、§6 移除已实现项）、shotcraft 1.2.0 + sync-platform、README/CLAUDE.md 新定位；`mcp-guide-sync` 占位测试改为真实断言。删除四份重复状态文档。
+- 已运行：`node --test "scripts/tests/**/*.test.mjs" scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs` → **117 项全过、0 失败、0 跳过**（原 96 项/1 跳过；新增 AE 21 项，SKILL-01 占位测试转为真实断言）；`npm run build` ✓；`node scripts/ae-reference-baseline.mjs`（真实引擎，独立实例 5391）✓。
+- **参考片基准（pdoom 参考复现，工程 `75efaf18`，独立实例，15fps 全片 2350 帧）**：画面峰 128 个（0.82/s），94% 落在拍/鼓点/词起点上；下拍命中 38%（33/87），中位偏移 25ms；高能量小节下拍命中 39%；运动中位 0.0155。分镜头：镜头 1（器乐+人声、无鼓）75% 在拍/词上；副歌 1 下拍命中 71%、85% 在拍上。“问题”只剩闪烁：22.9–23.8s 与 124.5–125.3s 副歌字块整屏黑/白/橙交替 6–7 次/秒（已用 filmstrip 逐帧确认属实，是原作风格，按规则只报告给人）。四处“死区”（第二/三次恳求、结尾）与 14 小节不跟拍均为参考片有意的克制，归为风格提示。
+- 校准过程（如实记录）：首版用绝对阈值与 gamma 亮度，参考片被报“过忙/命中率低/闪烁 6 次”等大量假阳性 → 改为：灰度 8×8 子采样压颗粒；运动等级以参考片小节运动五分位（0.014/0.021/0.033/0.049）为刻度；闪光改线性相对亮度且暗侧 <0.8；词起点计入节奏锚；发现分“问题/风格提示”。
+- 耗时：节奏报告瓶颈是 1080p 真实渲染（引擎 scale 只支持整数 ≥1），约 90–140ms/帧：单镜头 30fps 约 25–75s，全片 15fps 约 5.5 分钟；采样帧缓存后重算 <3s。filmstrip ≈2–5s，全片缩略图（22 镜头）≈30s。
+- 发现的平台约束：MCP SDK 客户端默认请求超时 60s → 所有等待上限 50s。
+- 诚实边界：闪烁只看全画面平均亮度，局部大面积闪光会漏报，不能代替正式光敏检测；与鼓点包络的相关系数在参考片上接近 0，目前只作信息展示，不产生“问题”；指标只对“节奏是否在拍上”有把握，不评价审美。
+
+#### AE-P1 节奏设计与审阅室
+
+- **节奏设计节点**：LLM 写镜头前先提交 `rhythm plan`（每段强度目标、切镜密度、重音落点清单、留白），服务端校验重音对应真实鼓点、段落间有反差、镜头时长分布合理；人可在渲染前对它提意见。
+- **风格基准节点**：色板、字体体系、材质颗粒、运动语言、构图规则、参考图；所有镜头读取，静态检查颜色是否在色板内。
+- **意见范围扩展**：全片 / 段落 / 风格范围的意见（如“太素了，多加转场”跨镜头）。
+- **审阅室前端**：主视图为带音乐的全片播放器 + 时间线（段落、拍网格、歌词、镜头、转场、意见标记、画面/音频能量曲线）；划像对比与同步播放；每版显示 LLM 的修改说明；参数 JSON/源码编辑改为只读或折叠。
+- **提交前自评**：校验后 LLM 必须看 filmstrip + contact sheet + rhythm report，按层次/构图/可读性/节奏/一致性/新意逐项写证据帧；自评不代替人采用。
+
+#### AE-P2 可局部修改的工程结构
+
+- 场景声明可调属性 schema 与“提示轨”（关键帧时间写成 `{ bar }` / `{ beat }` / `{ word }`，自动吸附拍点）；新增 `property_set` / `keyframe_set`，LLM 局部修改不必重写整个场景。
+- 引擎节拍工具函数：`f.events.next('downbeat')`、`sinceLast('snare')`、`anticipate(event, lead)`、`phraseProgress`；scene-lint 禁止大动作写死秒数。
+- 多变体：同一镜头 2–3 个变体静帧供人二选一。
+
+#### AE-P3 图层与偏好
+
+- 合成/图层模型（文字、形状、图片/Logo、3D、代码图层），每层变换/混合/入出点；ToB“换 Logo、改标题”变为属性修改。
+- 偏好记忆：从采用/拒绝历史提炼工程级偏好，随收件箱提供；独立上下文的评审 agent。
+- 不从音频建工程：ToB“脚本 + 素材”入口（接 ASSET-01）。
+
+#### 继续推进的既有工作（与 AE 并行）
+
+修构建并提交 SONG-02 半成品（其他会话）；SKILL-01 接入 MCP（=AE-05）；完成《THE LAST AUDIT》并用 AE 工具自查；《琵琶行》全链路成片 + SONG-03 中文字体子集化与 scene-lint；BUG-03/04；ASSET-01 接入工程；重跑转场集成审计。停止：人直接编辑参数/源码的功能扩展。
+
+### 人工意见冲刺（2026-10-01 起，已基本完成）：人工意见 → MCP 定位 → 改写视频代码
 
 目标：人在节点界面针对某个镜头/转场写意见，能指明**哪里**（时间点、歌词元素、画面区域）要改、**什么**必须保留。agent 通过 MCP 一次拿到所有待办，看到对应画面，修改场景源码，逐条说明怎么响应，最后由人对比后采用。同时把蒸馏出的 shotcraft skill 纳入仓库，经 MCP 提供给 agent。
 
@@ -551,6 +606,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | FB-02 / FB-03 | ✅ ZCode 会话 2026-10-02 完成，PR #1 已于 2026-10-02 合并 main（e258508，构建通过；node --test 86 项 82 过 0 失败 4 跳过）：FB-02 独占 `src/project/FeedbackComposer.tsx`、`ReviewCompare.tsx`；FB-03 独占 `src/server/mcp-feedback-tools.ts`、`scripts/tests/feedback/mcp-feedback-tools.test.mjs`、`ui-feedback.audit.mjs`、`helpers.mjs`。热点文件的最小接线也在本分支完成（`ProjectStudio.tsx` 替换接线、`reference-server.mjs` 时间广播、`render-worker.mjs` stills 任务、`index.mjs` stills 路由、`mcp-tools.ts`/`mcp-server.ts` 工具注册、`mcp-guide-sync.test.mjs` 合并读取两个工具源文件），集成者评审时重点看这几处 | 见第三节两个 ✅ 小节的命令与结果 |
 | FB-04 端到端验收 | ✅ ZCode 会话（QA-01 owner）2026-10-02 完成，全绿（约 1 分钟/轮） | `scripts/tests/collaboration/feedback-e2e.audit.mjs`、`helpers-fb04.mjs`（另接线 `scripts/audit-all.mjs`）；只测不改实现 | 见第三节 ✅ 小节：真实参考工程人机闭环 + 微型工程完整导出/清单/缓存断言 + 词起点帧逐像素保留项证明；BUG-02 已核实随 CLEANUP-01 作废 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05 ✅ 集成者 2026-10-02 接线完成；SONG-06 第 1 项（click track 全链路）✅，第 2/4 项待做；SONG-03 部分完成（见第三节） | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
+| AE LLM-AE 冲刺 | 🚧 集成者（本会话）2026-10-02 起，分支 `feat/llm-ae`（独立 worktree `../vg-llm-ae`）；AE-P0 ✅ 已运行验证（见第三节记录），AE-P1 起未开始 | `src/server/rhythm.mjs`、`src/server/mcp-ae-tools.ts`、`scripts/tests/ae/`，以及 render-worker/index/mcp-server 接线 | 见第三节 LLM-AE 冲刺 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 | CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |
 
@@ -601,7 +657,7 @@ ASSET-01 的面板和路由先从自己的目录导出；集成者在热点文�
 
 ---
 
-## 十、代码审查记录
+## 十二、代码审查记录（2026-10-01 快照；同日的 CODE_REVIEW/EXECUTIVE_SUMMARY/PROGRESS_DASHBOARD/PROJECT_STATUS 四份重复文档已于 2026-10-02 删除，以本文件为准）
 
 ### ✅ 2026-10-01 全面代码审查
 
@@ -672,9 +728,7 @@ ASSET-01 的面板和路由先从自己的目录导出；集成者在热点文�
 - [ ] 加强渲染沙箱 (超时+资源限制)
 
 **详细报告**:
-- 完整审查: `CODE_REVIEW.md` (20KB，35 节)
-- 执行摘要: `EXECUTIVE_SUMMARY.md` (7.9KB，11 节)
-- 进度仪表盘: `PROGRESS_DASHBOARD.md` (8.8KB，可视化)
+- 原详细报告（CODE_REVIEW 等）已删除，可在 git 历史 `ffc8f49` 查阅。
 
 **审查人**: Claude (Opus 5.5)  
 **下次审查**: 2026-10-14 (两周后)

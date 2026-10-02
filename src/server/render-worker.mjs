@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import { startReferenceServer } from './reference-server.mjs';
 import { projectDir, readJob, saveJob, mutateProject, sha256, productRoot } from './project-store.mjs';
 import { normalizeProject, transitionPair, transitionWindow, transitionConfig } from './transitions.mjs';
+import { analyzeRhythm, beatLabel, motionSeries, RHYTHM_VERSION } from './rhythm.mjs';
+import { pageSample, pageComposeGrid, pageDrawChart } from './ae-page.mjs';
 
 const [projectId, jobId] = process.argv.slice(2);
 const job = readJob(projectId, jobId);
@@ -190,8 +192,122 @@ try {
     job.result = { revision: frozen.revision, stills: { ...stillsInput, images } };
   }
 
+  // AE-02/03/04：filmstrip / contact-sheet / rhythm。只读分析任务：不改工程状态，产物按内容寻址缓存。
+  async function runAe() {
+    const input = job.input.ae;
+    const readCode = (shot) => readFileSync(join(dir, `engine/app/src/scenes/${shot.module}.ts`), 'utf8');
+    const incomingOf = (shot) => transitions.find((entry) => entry.toShotId === shot.id && entry.mode !== 'cut') ?? null;
+    const previousOf = (shot) => { const incoming = incomingOf(shot); return incoming ? transitionPair({ ...frozen, shots }, incoming).left : null; };
+    const shotKey = (shot) => {
+      if (!shot.module) return { id: shot.id, missing: true };
+      const incoming = incomingOf(shot), previous = previousOf(shot);
+      return { id: shot.id, code: readCode(shot), start: shot.start, end: shot.end, params: shot.params, post: shot.post,
+        incoming: incoming ? { config: transitionConfig(incoming), from: previous?.module ? readCode(previous) : null } : null };
+    };
+    const keyFor = (involved) => sha256(JSON.stringify({ engine: frozen.engineHash, hostHash, browser: browser.version(), scope: `ae-${job.kind}`, input, shots: involved.map(shotKey), version: 'ae-v2' }));
+    const shotAt = (t) => shots.find((shot) => t >= shot.start - 1e-6 && t < shot.end - 1e-6) ?? shots[shots.length - 1];
+    const ensureModule = (shot) => { if (!shot.module) throw new Error(`${shot.id} 还没有源码：先 project_shot_submit`); };
+    mkdirSync(join(dir, 'artifacts'), { recursive: true });
+    const save = (key, png) => { writeFileSync(join(dir, 'artifacts', `${key}.png`), Buffer.from(png, 'base64')); return `artifacts/${key}.png`; };
+    const groups = (times) => {
+      const map = new Map();
+      for (const t of times) { const shot = shotAt(t); if (!map.has(shot.id)) map.set(shot.id, { shot, times: [] }); map.get(shot.id).times.push(t); }
+      return [...map.values()];
+    };
+    const checkErrors = (sample, shot) => {
+      if (sample.errors.length || browserErrors.length) throw new Error(`${shot.id}: ${[...sample.errors, ...browserErrors].join('\n')}`);
+    };
+
+    if (job.kind === 'filmstrip') {
+      const key = keyFor(groups(input.times).map((group) => group.shot));
+      if (!existsSync(join(dir, 'artifacts', `${key}.png`))) {
+        const tiles = [];
+        let done = 0;
+        for (const { shot, times } of groups(input.times)) {
+          ensureModule(shot);
+          await loadShot(shot, previousOf(shot));
+          const sample = await page.evaluate(pageSample, { times, sequential: false, thumbWidth: input.thumbWidth });
+          checkErrors(sample, shot);
+          const index = shots.indexOf(shot) + 1;
+          times.forEach((t, i) => {
+            const label = beatLabel(frozen.song, t, 0.5 / fps);
+            tiles.push({ png: sample.thumbs[i], accent: label.marks.some((mark) => mark.startsWith('●')), lines: [label.text, `#${index} ${shot.title ?? shot.id}`] });
+          });
+          done += times.length;
+          progress(`帧序列 ${done}/${input.times.length}`, done / input.times.length);
+        }
+        save(key, await page.evaluate(pageComposeGrid, { tiles, columns: input.columns, tileWidth: input.thumbWidth, title: `帧序列 · ${input.label} · ${input.times.length} 帧 · 橙框=下拍` }));
+      }
+      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'filmstrip' }], times: input.times,
+        labels: input.times.map((t) => beatLabel(frozen.song, t, 0.5 / fps).text) };
+      return;
+    }
+
+    if (job.kind === 'contact-sheet') {
+      const key = keyFor(shots);
+      if (!existsSync(join(dir, 'artifacts', `${key}.png`))) {
+        const tiles = [];
+        for (const [index, shot] of shots.entries()) {
+          const section = (frozen.song.sections ?? []).find((entry) => shot.start >= entry.start - 0.05 && shot.start < entry.end - 0.05)?.name ?? '';
+          const head = `#${index + 1} ${shot.title ?? shot.id}`, sub = `${shot.start.toFixed(1)}–${shot.end.toFixed(1)}s ${section} ${shot.status ?? ''}`;
+          const times = input.ratios.map((ratio) => Math.min(shot.end - 1 / fps, shot.start + (shot.end - shot.start) * ratio));
+          if (!shot.module) { for (const _ of times) tiles.push({ placeholder: '未生成源码', lines: [head, sub] }); continue; }
+          await loadShot(shot, previousOf(shot));
+          const sample = await page.evaluate(pageSample, { times, sequential: false, thumbWidth: input.thumbWidth });
+          checkErrors(sample, shot);
+          sample.thumbs.forEach((png) => tiles.push({ png, lines: [head, sub] }));
+          progress(`全片缩略图 ${index + 1}/${shots.length}`, (index + 1) / shots.length);
+        }
+        save(key, await page.evaluate(pageComposeGrid, { tiles, columns: input.columns, tileWidth: input.thumbWidth, title: `全片缩略图 · ${shots.length} 镜头 · 每镜 ${input.ratios.length} 帧（${input.ratios.join('/')}）` }));
+      }
+      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'contact-sheet' }],
+        shots: shots.map((shot, index) => ({ index: index + 1, id: shot.id, title: shot.title, start: shot.start, end: shot.end, status: shot.status })) };
+      return;
+    }
+
+    // rhythm：按 sampleFps 顺序渲染（有状态场景正确），64×36 灰度帧算运动与亮度。
+    const sampleFps = input.sampleFps;
+    const first = Math.ceil(input.start * sampleFps - 1e-6), last = Math.floor(input.end * sampleFps - 1e-6);
+    const times = [];
+    for (let n = first; n <= last; n++) times.push(n / sampleFps);
+    // 采样帧（64×36 灰度）按渲染输入缓存；指标算法升级（RHYTHM_VERSION）时只重算报告，不重新渲染。
+    const framesKey = keyFor(groups(times).map((group) => group.shot));
+    const framesFile = join(dir, 'artifacts', `${framesKey}.gray`);
+    let frames = [];
+    if (existsSync(framesFile)) {
+      const bytes = readFileSync(framesFile), size = 64 * 36;
+      for (let offset = 0; offset < bytes.length; offset += size) frames.push(new Uint8Array(bytes.subarray(offset, offset + size)));
+    }
+    if (frames.length !== times.length) {
+      frames = [];
+      for (const { shot, times: own } of groups(times)) {
+        ensureModule(shot);
+        await loadShot(shot, previousOf(shot));
+        for (let offset = 0; offset < own.length; offset += 60) {
+          // 每段第一帧 seek，其余连续渲染；分块只是为了进度与单次 evaluate 体积。
+          const chunk = own.slice(offset, offset + 60);
+          const sample = await page.evaluate(pageSample, { times: chunk, sequential: true, seekFirst: offset === 0, dt: 1 / sampleFps, gray: { w: 64, h: 36 } });
+          checkErrors(sample, shot);
+          for (const gray of sample.grays) frames.push(new Uint8Array(Buffer.from(gray, 'base64')));
+          progress(`节奏采样 ${frames.length}/${times.length} 帧`, frames.length / times.length * 0.97);
+        }
+      }
+      writeFileSync(`${framesFile}.tmp`, Buffer.concat(frames.map((frame) => Buffer.from(frame))));
+      renameSync(`${framesFile}.tmp`, framesFile);
+    }
+    const { motion, luma } = motionSeries(frames);
+    const analysis = analyzeRhythm(frozen.song, { fps: sampleFps, t: times, motion, luma }, { shots, label: input.label });
+    const key = sha256(`${framesKey}:${RHYTHM_VERSION}`);
+    if (!existsSync(join(dir, 'artifacts', `${key}.png`))) save(key, await page.evaluate(pageDrawChart, analysis.chart));
+    writeFileSync(join(dir, 'artifacts', `${key}.json`), JSON.stringify({ text: analysis.text, metrics: analysis.metrics, bars: analysis.bars }));
+    job.result = { revision: frozen.revision, text: analysis.text, metrics: analysis.metrics, images: [{ file: `artifacts/${key}.png`, kind: 'rhythm-chart' }], report: `artifacts/${key}.json` };
+  }
+
+
   if (job.kind === 'stills') {
     await runStills();
+  } else if (['filmstrip', 'contact-sheet', 'rhythm'].includes(job.kind)) {
+    await runAe();
   } else {
   const targetTransition = job.kind === 'validate-transition' ? frozen.transitions.find((entry) => entry.id === job.input.transitionId) : null;
   if (job.kind === 'validate-transition' && !targetTransition) throw new Error('转场不存在');
@@ -270,7 +386,7 @@ try {
       '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k', '-af', 'apad', '-t', String(total / fps), '-movflags', '+faststart', output]);
     job.result = { file: `exports/${jobId}/pv.mp4`, frames: total, seconds: total / fps, fps, samples, revision: frozen.revision, transitions: frozen.transitions.map(({ id, fromShotId, toShotId, mode, duration, easing, direction }) => ({ id, fromShotId, toShotId, mode, duration, easing, direction })), reports };
     writeFileSync(join(outDir, 'manifest.json'), JSON.stringify({ ...job.result, engineHash: frozen.engineHash, audioHash: frozen.audio.hash, credits: frozen.credits }, null, 2));
-  } else if (job.kind !== 'stills') job.result = { revision: frozen.revision, reports };
+  } else if (!['stills', 'filmstrip', 'contact-sheet', 'rhythm'].includes(job.kind)) job.result = { revision: frozen.revision, reports };
   }
   job.status = 'done'; job.finishedAt = Date.now(); progress('完成', 1);
 } catch (error) {
