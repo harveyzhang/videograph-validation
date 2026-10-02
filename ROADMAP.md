@@ -19,7 +19,7 @@
 4. **真实工程的表现力不能被模板限制。** Canvas 模板只用于测试/兜底；原始 Three.js、GLSL、字体轮廓、后期能力要能够接入。
 5. **音乐是一个应用场景。** ToB 的品牌资料、产品卖点、旁白/脚本与音乐人的歌曲/歌词/节拍共享工程核心；歌词不是所有工程必填项。
 6. **诚实标记来源与边界。** 参考源码、MCP 新写源码、缓存分析、重新分析、技术验证、人工接受，分别标记。
-7. **本地优先、渐进迁移。** 不整仓重写，不动参考仓库；初期一个模块化服务和渲染子进程，不提前上微服务、Redis、K8s、插件市场或多人协作平台。
+7. **本地优先、渐进迁移。** 不整仓重写，不动参考仓库；初期一个模块化服务和渲染子进程，不提前上微服务、Redis、K8s 或多人协作平台。**动效插件市场分阶段做（2026-10-02 用户确认方向）**：先做本地、许可审查过的动效库（FX 冲刺），验证 LLM 用得好之后再开放第三方提交与分发。
 
 ## 二、当前进度
 
@@ -121,6 +121,72 @@
 - 合成/图层模型（文字、形状、图片/Logo、3D、代码图层），每层变换/混合/入出点；ToB“换 Logo、改标题”变为属性修改。
 - 偏好记忆：从采用/拒绝历史提炼工程级偏好，随收件箱提供；独立上下文的评审 agent。
 - 不从音频建工程：ToB“脚本 + 素材”入口（接 ASSET-01）。
+
+### ✅ DIR AI 导演闭环（2026-10-02，另一会话实现；集成者核查、修复并登记）
+
+目标：让较弱的模型（GLM）也能按“服务给出的下一步”可靠地从音频做到成片，并能在中断后恢复。规格与工具详见 `docs/MCP-GUIDE.md` §4/§6（server `videograph` 0.4.0）。
+
+- **导演方案**：`project_director_submit` 保存 brief/style/rhythm（段落强度、重音）/逐镜 brief/maxRepairs（≤2），带工程版本；`analysisSignature` 绑定音频与分析，分析一变方案即失效。
+- **下一步与租约**：`project_director_get/next` 返回 phase（analysis → direction → planning → producing → validating → repairing → reviewing → awaiting-human → export-ready → exported）、actions、blockers、`resumable`；`claim` 发短租约与 `attemptToken`，镜头/转场写入带 token 才形成 receipt；`complete` 校验租约、目标版本、receipt 与真实 jobIds；`dispatch` 只批量入队确定性任务（validate/stills/filmstrip/rhythm/contact-sheet/export）。修复预算耗尽即阻塞，不能靠换 owner 或重提方案绕过（重提会清空进度并留史）。
+- **证据化自评**：`project_review_submit` 必须引用真实 stills/filmstrip/contact-sheet/rhythm 任务与 PNG（产物带 `contentHash`），`signature` 覆盖全片生产输入，过期自动失效；**人工接受只在界面**（`accept-review`，记 `acceptedBy: human`，无 MCP 工具）。有导演方案的工程导出需：分析签名一致 + 全部技术验证通过 + 当前自评已被人接受且无 blocking 问题；没有导演方案的旧工程导出不受影响。
+- **配套**：`song_analysis_retry`（仅 analysis-failed）、`song_analysis_patch`（整层 rhythm/sections，回到 draft 需重新确认）；新歌工程提交源码时强制 scene-lint（SONG-03 第 3 条接线）；规划器切点改为“先量化到帧再检查不落词中”，镜头 id 重复改为全局检查；MCP prompt `direct_video` 与 resources `videograph-create` skill（`.agents/skills/videograph-create/`）、`aesthetic-review.md` 审片准则；前端 `DirectorPanel`（阶段/待办/自评与人工接受）与 `SongStagePanel`。
+- **核查结果（集成者）**：`npm run build` ✓；`node --test "scripts/tests/**/*.test.mjs" scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs` → 139/139 → 加回归后 140/140。共享文件接线（index/project-store/render-worker/mcp-server/mcp-tools）与现有模式一致；导出闸门只作用于有导演方案的工程。
+- **核查发现并修复**：对**没有导演方案的已有工程**（《THE LAST AUDIT》、参考复现工程）调用 `project_director_get` 直接崩溃（`director.operations/maxRepairs` 未判空）——测试夹具总是先提交方案，没覆盖这条入口。已修（无方案时跳过租约/预算计算）并加回归测试；两个真实工程实测返回 `phase: direction`、下一步 `project_director_submit`。
+- 流程问题：该会话未在本文件登记工作包与结果（违反单一计划约定），已由集成者补记。
+- **人工未验收**：尚未有真实 GLM 会话完整跑通“方案 → 制作 → 自评 → 人接受 → 导出”。
+
+### FX 冲刺：动效库 → 插件市场（2026-10-02 用户新方向；排在 AE-P0 之后、与 AE-P1 并行）
+
+目标：做 LLM 的 After Effects 的“效果和预设”面板。LLM 不必每次从零写特效，而是检索、套用、调参数一个**版本化、带许可证、有预览、可节拍绑定**的动效；人在审阅室看到每个镜头用了哪些动效并可对其提意见。先做本地库，后做市场。
+
+#### 动效包（effect package）规格
+
+- `manifest.json`：`id / name / version / kind`（`transition` 转场 | `post` 后期滤镜 | `text` 文字动画器 | `generator` 生成层 | `preset` 镜头/工程模板）、一句话用途、何时用/何时别用、`params`（类型、范围、默认值、单位）、`bindings`（哪些参数可绑定到下拍/kick/snare/词起点/段落能量，及默认衰减）、引擎能力级别（L0 Canvas / L1 GLSL / L2 3D）、确定性声明。
+- `provenance`：上游仓库 URL + commit + 文件路径、SPDX 许可证、版权行、署名文本、改动说明；导出时自动汇总进成片 `CREDITS` 与导出清单。
+- 代码：GLSL（`transition(uv)` / `effect(uv)` 接口）或符合引擎 Scene/Layer 契约的 TS 模块；测试（编译、5 时间点、同输入逐像素一致）。
+- 预览：由 AE-02/03 工具自动生成的帧序列图与参数网格图，不手工截图。
+
+#### 许可政策（入库硬门槛）
+
+- 默认库只收：MIT / BSD / Apache-2.0 / Zlib / ISC / CC0（代码）、OFL（字体）。逐文件核对许可证头，仓库级许可不覆盖单文件另有声明的情况。
+- 不收：无许可证、NC（如 Shadertoy 默认 CC BY-NC-SA、madmom 权重）、SA/copyleft 进分发包（AGPL/GPL 只可作为独立外部工具调用）、需商业授权的（如 lygia 的 Prosperity 双许可、Remotion 公司许可、GSAP 标准许可不可再分发）。
+- 无许可或许可不明的来源只能当“灵感”：用自己的话记录技法与参数取值，自己重写实现，provenance 写“思路参考，未复制代码”。
+
+#### 候选来源（待逐文件核实许可）
+
+| 来源 | 许可（待核） | 用于 |
+|---|---|---|
+| gl-transitions | MIT（逐文件头核对） | 转场：约 80 个 GLSL 转场，接口统一、参数注释可直接转 schema；首批 15 个 |
+| pmndrs/postprocessing | Zlib | 后期：glitch、色差、噪点、扫描线、暗角、像素化、点阵 |
+| three.js examples/jsm/shaders | MIT | 后期：胶片颗粒、RGB 位移、半调、万花筒、残影 |
+| glfx.js | MIT | 后期：墨水、六边形像素化、漩涡 |
+| anime.js / Motion Canvas / Theatre.js core | MIT / MIT / Apache-2.0 | 缓动与文字动画器的参数设计参考 |
+| 本项目 pdoom 引擎快照（MIT）与 shotcraft | MIT / 本仓库 | 第一方动效：刻线/版画/热成像 GLSL、bloom 金字塔、卡拉OK 状态机、出生钟粒子、odometer 滚数 |
+| t01090943940-afk/Videos 中的 `motion-library-atlas`（MIT） | MIT | 111 个动画库的能力词典 → 作为来源筛选清单（不含各库许可，仍需逐个核） |
+| t01090943940-afk/Videos 中的 `stop-motion-3d` skill（MIT） | MIT | 定格风格管线与 QC 思路，可署名纳入技法库 |
+| t01090943940-afk/Videos 其余部分（31 个案例源码、CoExp、casebook 卡片） | **作者已口头授权（2026-10-02，用户转述：作者是用户的朋友）；书面许可待落地** | 作者自有内容（代码、CoExp、卡片、自生成配乐与成片）可用于 FX 动效与 FX-05 工程模板。**范围不含第三方素材**：字体（多为 OFL，改从官方来源获取并附许可）、现成歌曲（如 kimi-beat `bgm.mp3`）与疑似素材库音效（swe-ai-rise `mk_*.mp3`）、真人照片与成员信息（protocom）、来源不明纹理、品牌名/Logo/二维码。书面许可落地前：可在本机开发、做模板与动效原型，provenance 标 `author-grant-pending`；不进入对外发布包与市场 |
+
+#### 从 Videos 仓库借鉴的做法（借结构，不搬内容）
+
+1. **检索卡**（一句话、何时抄、坑、预览图）→ 动效卡与 `effect_search` 返回格式。
+2. **20 帧联系表 preview.jpg** → 我们用 `project_filmstrip` 自动生成每个动效的预览。
+3. **“找最接近的案例 → 拷贝 → 只换数据层”** → `preset` 类：自写的 ToB 宣传片/卡点片工程模板（产品宣传、组织宣传、软件教学、节日祝福等骨架），LLM 选模板后只换文案、素材、配色与节奏表。
+4. **工程铁律交叉校验**：BPM×FPS 整数帧提示加入节奏表表头；“交付如实说明”与我们的诚实边界一致；体积上限反推码率、响度检测 → 导出预设。
+5. **多技术栈案例**（Canvas/DOM/HyperFrames/Python）→ 未来“外部工程接入”：任何暴露 `renderAt(t)` 的网页工程可作为一个代码图层镜头（只接入用户有权使用的工程）。
+
+#### 工作包与顺序
+
+`FX-00 → FX-01 → (FX-02 ∥ FX-03) → FX-04 → FX-05 →（验证后）FX-06`
+
+- **FX-00 许可与登记**：manifest/provenance JSON Schema + 校验器；SPDX 白/黑名单；`effects/` 目录与 `effects/REGISTRY.json`；导出 CREDITS 自动汇总。验收：缺许可/黑名单许可/缺署名的包被拒。
+- **FX-01 运行时**：引擎内动效宿主——每镜头后期链（复用 `gl.ts` 的 `FSPass/makeRT`）、转场节点新增 `mode: effect`（gl-transitions 接口）、参数 schema 校验、节拍绑定（参数 = 基础值 + 强度 × 脉冲(beatPhase/kick/词起点)）；缓存键含动效包 hash。验收：同输入逐像素一致；改动效参数只让该镜头/该转场缓存失效。
+- **FX-02 首批 30 个**：15 转场（gl-transitions）、10 后期（postprocessing/three examples/glfx）、5 第一方（pdoom 引擎）。每个自动出预览图并过确定性测试；`effects/CREDITS.md` 齐全。
+- **FX-03 MCP 与审阅室**：`effect_search / effect_get（含预览图）/ effect_apply / effect_update / effect_remove`；`effect_apply` 走版本检查并让目标进入待验证；前端在镜头/转场上显示动效栈（只读，可对单个动效提意见）。MCP-GUIDE 同步。
+- **FX-04 采集流水线（agent 辅助、人把关）**：给定仓库 URL → 拉取指定 commit → 逐文件许可扫描 → 抽取候选 → 包装 manifest → 自动预览 → 人在界面批准入库；拒绝原因留档。这就是“收集开源动效代码”的正式入口。
+- **FX-05 工程模板（preset）**：作者授权后，以 Videos 仓库的 ToB 宣传片案例（skillshub、xuanlan、studysolo、protocom、shuchenglin、f12、yusheng 等）为原型，改造成 VideoGraph 工程模板：保留结构与节奏骨架，第三方素材与真人/品牌信息全部替换为占位并标出“需用户提供”；另自写 1–2 个骨架作对照。配合 `song_cue_sheet` 与动效库使用。
+- **FX-06 市场（后置）**：第三方提交、签名与沙箱、评分、版本更新通知；动效代码视为不可信代码，渲染隔离与资源预算先补齐（见第五节安全）。
+
+参考仓库只读克隆在 `F:/aicg/ref-videos`（不入库、不修改）。
 
 #### 继续推进的既有工作（与 AE 并行）
 
