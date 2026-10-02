@@ -87,7 +87,7 @@
 | AE-06 | 工具好用性：`project_job_get` 支持 `waitSeconds` 阻塞等待；MCP server 更名 `videograph`（保留 `mcp:pdoom` 脚本别名） | 单测/冒烟 |
 | AE-07 | 清理：构建修复（`VideoProject` 补 `status`/`analysis.error`/`confirmedBy` 可选类型）；删除与本文件重复的四份状态文档 | `npm run build` 通过 |
 
-**AE-P0 交付记录（2026-10-02，集成者，分支 `feat/llm-ae`，独立 worktree `../vg-llm-ae`，未提交）**
+**AE-P0 交付记录（2026-10-02，集成者；`bdacc13` 已快进合并 main 与 test/collaboration，服务 5191/5188 已用新代码重启，worktree 已清理）**
 
 - 状态：AE-01～07 ✅ 已写代码 + 已运行验证（夹具引擎全自动；真实 pdoom 引擎在独立实例 5391 上实跑）。**人工未验收**：节奏指标与图片对 LLM 创作的实际帮助，要在《THE LAST AUDIT》上用真实 agent 试用后由人判断。
 - 新文件：`src/server/rhythm.mjs`（节奏表与节奏报告纯函数）、`src/server/ae-page.mjs`（渲染页内采样/拼图/画图）、`src/server/mcp-ae-tools.ts`（5 个 MCP 工具）、`scripts/tests/ae/rhythm.test.mjs`（13 项）、`scripts/tests/ae/ae-tools.test.mjs`（8 项真实 stdio + 服务 + Edge 渲染）、`scripts/ae-reference-baseline.mjs`（参考片基准脚本）。
@@ -99,6 +99,8 @@
 - 耗时：节奏报告瓶颈是 1080p 真实渲染（引擎 scale 只支持整数 ≥1），约 90–140ms/帧：单镜头 30fps 约 25–75s，全片 15fps 约 5.5 分钟；采样帧缓存后重算 <3s。filmstrip ≈2–5s，全片缩略图（22 镜头）≈30s。
 - 发现的平台约束：MCP SDK 客户端默认请求超时 60s → 所有等待上限 50s。
 - 诚实边界：闪烁只看全画面平均亮度，局部大面积闪光会漏报，不能代替正式光敏检测；与鼓点包络的相关系数在参考片上接近 0，目前只作信息展示，不产生“问题”；指标只对“节奏是否在拍上”有把握，不评价审美。
+
+- **首次实测《THE LAST AUDIT》（2026-10-02，副歌 1 22.05–36.60s，30fps）**：画面峰 100% 在拍/鼓点/词起点上（同步没问题），但运动中位 0.0018，约为参考片同段（0.0176）的 1/10；第 16–19 小节（27.5–34.8s，主要是镜头 `shoggoth`）音乐能量 4、画面运动 1 → 与人已提出的“是不是有点太素了”一致。作为较弱模型（GLM）的第一个试用任务：只改 `shoggoth`，目标是高能量小节画面运动 ≥3 级、在拍比例 ≥85%、无闪烁，结果交人对比采用。
 
 #### AE-P1 节奏设计与审阅室
 
@@ -606,7 +608,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | FB-02 / FB-03 | ✅ ZCode 会话 2026-10-02 完成，PR #1 已于 2026-10-02 合并 main（e258508，构建通过；node --test 86 项 82 过 0 失败 4 跳过）：FB-02 独占 `src/project/FeedbackComposer.tsx`、`ReviewCompare.tsx`；FB-03 独占 `src/server/mcp-feedback-tools.ts`、`scripts/tests/feedback/mcp-feedback-tools.test.mjs`、`ui-feedback.audit.mjs`、`helpers.mjs`。热点文件的最小接线也在本分支完成（`ProjectStudio.tsx` 替换接线、`reference-server.mjs` 时间广播、`render-worker.mjs` stills 任务、`index.mjs` stills 路由、`mcp-tools.ts`/`mcp-server.ts` 工具注册、`mcp-guide-sync.test.mjs` 合并读取两个工具源文件），集成者评审时重点看这几处 | 见第三节两个 ✅ 小节的命令与结果 |
 | FB-04 端到端验收 | ✅ ZCode 会话（QA-01 owner）2026-10-02 完成，全绿（约 1 分钟/轮） | `scripts/tests/collaboration/feedback-e2e.audit.mjs`、`helpers-fb04.mjs`（另接线 `scripts/audit-all.mjs`）；只测不改实现 | 见第三节 ✅ 小节：真实参考工程人机闭环 + 微型工程完整导出/清单/缓存断言 + 词起点帧逐像素保留项证明；BUG-02 已核实随 CLEANUP-01 作废 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05 ✅ 集成者 2026-10-02 接线完成；SONG-06 第 1 项（click track 全链路）✅，第 2/4 项待做；SONG-03 部分完成（见第三节） | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
-| AE LLM-AE 冲刺 | 🚧 集成者（本会话）2026-10-02 起，分支 `feat/llm-ae`（独立 worktree `../vg-llm-ae`）；AE-P0 ✅ 已运行验证（见第三节记录），AE-P1 起未开始 | `src/server/rhythm.mjs`、`src/server/mcp-ae-tools.ts`、`scripts/tests/ae/`，以及 render-worker/index/mcp-server 接线 | 见第三节 LLM-AE 冲刺 |
+| AE LLM-AE 冲刺 | 🚧 集成者（本会话）2026-10-02 起；AE-P0 ✅ 已运行验证并合并 main（`bdacc13`），AE-P1 起未开始 | `src/server/rhythm.mjs`、`src/server/mcp-ae-tools.ts`、`scripts/tests/ae/`，以及 render-worker/index/mcp-server 接线 | 见第三节 LLM-AE 冲刺 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 | CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |
 
