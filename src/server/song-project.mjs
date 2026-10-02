@@ -256,6 +256,51 @@ export function submitSongLyrics(id, expectedInputRevision, lyrics, source = 'mc
 }
 
 /**
+ * 规划前修正分析：patch = { rhythm?: 完整 v2 rhythm 层, sections?: 完整 v2 sections 数组 }。
+ * 不支持局部 bpm/offset 指令：必须提交完整拍点；派生引擎要求恒定 bpm。
+ * overrides.patch = { before: { data, provenance }, after } 保留每次原数据/来源；不代替人工确认。
+ */
+export function patchSongAnalysis(id, expectedInputRevision, patch, author = 'mcp') {
+  if (!Number.isSafeInteger(expectedInputRevision) || expectedInputRevision < 0) throw new ProjectError('expectedInputRevision 必须是非负整数', 400);
+  if (!['mcp', 'human'].includes(author)) throw new ProjectError('author 只能是 mcp 或 human', 400);
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new ProjectError('patch 必须是 rhythm/sections 整层替换对象', 400);
+  const layers = Object.keys(patch);
+  if (!layers.length || layers.some((layer) => !['rhythm', 'sections'].includes(layer))) throw new ProjectError('patch 仅支持 rhythm/sections 整层替换', 400);
+  // mutateProject 在事务内校验版本后才调用回调；过时请求不能提前改写分析/引擎文件。
+  return mutateProject(id, expectedInputRevision, (project) => {
+    if (!['analysis-draft', 'analysis-confirmed'].includes(project.status)) throw new ProjectError(`只能在规划前修正分析，当前是 ${project.status ?? 'normal'}`, 409);
+    if (layers.includes('rhythm')) {
+      const rhythm = patch.rhythm;
+      const allowed = ['bpm', 'tempoMap', 'beatPeriod', 'beats', 'downbeats', 'meter', 'confidence'];
+      if (!rhythm || typeof rhythm !== 'object' || Array.isArray(rhythm) || Object.keys(rhythm).some((key) => !allowed.includes(key))) {
+        throw new ProjectError('rhythm 必须是完整 v2 层，不支持局部 offset 指令或未知字段', 400);
+      }
+    }
+    const original = readAnalysis(id);
+    const at = Date.now();
+    const raw = structuredClone({ ...original, ...patch });
+    for (const layer of layers) {
+      raw.provenance[layer] = { ...original.provenance[layer], tool: `videograph/${author}-edit`, version: '1', startedAt: at,
+        params: { editedBy: author, inputRevision: expectedInputRevision, mode: 'replace' } };
+    }
+    const corrected = check(() => validateAnalysis(raw));
+    for (const layer of layers) {
+      corrected.overrides.push({ layer, author, at, patch: {
+        before: { data: original[layer], provenance: original.provenance[layer] }, after: corrected[layer],
+      } });
+    }
+    const published = publishAnalysis(id, corrected, project.name);
+    Object.assign(project, published);
+    project.status = 'analysis-draft';
+    project.analysis = { ...project.analysis, editedBy: author, editedAt: at, editedLayers: layers,
+      note: '节拍/段落已修改，需要重新确认后才能规划镜头。' };
+    delete project.analysis.confirmedAt;
+    delete project.analysis.confirmedBy;
+    return project;
+  });
+}
+
+/**
  * 提交镜头规划。plan 为 [{ lineText | sectionIndex | t, title?, prompt?, id? }]，切点由锚点推导（吸附拍、不切词）；
  * 省略 plan 时使用确定性兜底（每段一镜，明确标注非 AI 创作）。
  */

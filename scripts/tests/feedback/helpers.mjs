@@ -40,7 +40,7 @@ export function writeFixtureEngine(dir) {
   mkdirSync(join(app, 'src/engine'), { recursive: true });
   writeFileSync(join(app, 'index.html'), `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>fixture engine</title>
 <style>body{margin:0;background:#0b0d11;color:#EEE9DF;font:12px monospace}canvas{display:block}</style></head>
-<body><canvas id="c" width="960" height="540"></canvas><div id="info">0.00 · fixture</div>
+<body><canvas id="c" width="1920" height="1080"></canvas><div id="info">0.00 · fixture</div>
 <script type="module" src="/src/main.ts"></script></body></html>`);
   writeFileSync(join(app, 'src/engine/gl.ts'), `// 夹具占位：reference-server 注入的 transition-runtime 顶层 import 需要它能解析；cut-only 时不会被调用。
 export class FSPass { constructor() { throw new Error('fixture engine has no WebGL'); } }
@@ -75,6 +75,18 @@ window.__pdoom = {
   ready: true, errors: [], error: null,
   async still(t) { drawAt(t); },
   png() { return canvas.toDataURL('image/png').split(',')[1]; },
+  async stream({ from, to, fps, ws }) {
+    const socket = new WebSocket(ws);
+    await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
+    const frames = Math.round((to - from) * fps);
+    for (let i = 0; i < frames; i++) {
+      drawAt(from + i / fps);
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      socket.send(pixels);
+      await new Promise((resolve, reject) => { socket.onmessage = resolve; socket.onerror = reject; });
+    }
+    socket.close();
+  },
 };
 document.body.classList.add('vg-ready');
 `);

@@ -10,6 +10,8 @@ import { prepareLyricPlan, shotLyricContext } from './lyric-elements.mjs';
 import { normalizeProject, transitionPair, transitionConfig, validateTransitionConfig, transitionWindow } from './transitions.mjs';
 import { createSongProject } from './song-project.mjs';
 import { prepareFeedbackInput, createNote, invalidateResponses, prepareResponses, applyResponses, askOnNote, replyOnNote, inboxItems, feedbackTargetWindow, lyricElementIds } from './feedback.mjs';
+import { assertSceneLint } from '../song/scene-lint.mjs';
+import { trackDirectorCommit, receiptDirectorCommit } from './director-commit.mjs';
 export { ProjectError } from './errors.mjs';
 
 export const productRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -160,10 +162,11 @@ function restoreSnapshot(target, snapshot) {
   }
 }
 
-export function updateShot(id, shotId, expectedInputRevision, patch) {
+export function updateShot(id, shotId, expectedInputRevision, patch, attemptToken) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some((key) => !['title', 'prompt', 'params', 'lyricPlan', 'locked'].includes(key))) throw new ProjectError('unsupported shot patch');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
+    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken);
     const edits = Object.keys(patch).filter((key) => key !== 'locked');
     if (shot.locked && edits.length) throw new ProjectError('镜头已锁定，请先显式解锁', 409);
     if (patch.title !== undefined) {
@@ -192,6 +195,7 @@ export function updateShot(id, shotId, expectedInputRevision, patch) {
       invalidateResponses(shot);
       shot.inputRevision++; shot.inputToken = randomUUID(); delete shot.validation;
     }
+    if (directorOp) directorOp.cursorToken = shot.inputToken;
     return project;
   });
 }
@@ -206,12 +210,14 @@ export function readShotSource(id, shotId) {
   return { shot, ...(template ? { template: true } : {}), code: readFileSync(join(engine, `app/src/scenes/${template ? '_window-template' : shot.module}.ts`), 'utf8'),
     contract: readFileSync(join(engine, 'docs/ENGINE.md'), 'utf8'), lyricContext: shotLyricContext(project, shot), source: shot.source };
 }
-export function submitShotSource(id, shotId, expectedInputRevision, code, summary = '', addressedFeedbackIds = [], author = 'mcp', feedbackResponses = []) {
+export function submitShotSource(id, shotId, expectedInputRevision, code, summary = '', addressedFeedbackIds = [], author = 'mcp', feedbackResponses = [], attemptToken) {
   if (typeof code !== 'string' || code.length < 20 || code.length > 200000) throw new ProjectError('invalid scene code');
   if (!['mcp', 'human'].includes(author)) throw new ProjectError('invalid source author');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
+    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken);
     if (shot.locked) throw new ProjectError('镜头已锁定', 409);
+    if (project.status && project.song?.lines) assertSceneLint(code, { lyrics: { lines: project.song.lines } });
     const responses = prepareResponses(shot, addressedFeedbackIds ?? [], feedbackResponses ?? []);
     shot.previousVersion = versionSnapshot(shot);
     const hash = sha256(code);
@@ -229,6 +235,7 @@ export function submitShotSource(id, shotId, expectedInputRevision, code, summar
     invalidateResponses(shot);
     applyResponses(shot, responses, { codeHash: hash, inputToken: shot.inputToken, author });
     delete shot.validation;
+    receiptDirectorCommit(project, shot, 'shot', directorOp);
     return project;
   });
 }
@@ -308,10 +315,11 @@ export function updateTransition(id, transitionId, expectedInputRevision, patch)
     return project;
   });
 }
-export function configureTransition(id, transitionId, expectedInputRevision, config, addressedFeedbackIds = [], author = 'mcp', feedbackResponses = []) {
+export function configureTransition(id, transitionId, expectedInputRevision, config, addressedFeedbackIds = [], author = 'mcp', feedbackResponses = [], attemptToken) {
   if (!['human', 'mcp'].includes(author)) throw new ProjectError('invalid transition author');
   return mutateProject(id, undefined, (project) => {
     const transition = targetFor(project, transitionId, expectedInputRevision, 'transition');
+    const directorOp = trackDirectorCommit(project, transition, 'transition', attemptToken);
     if (transition.locked) throw new ProjectError('转场已锁定，请先解锁', 409);
     const responses = prepareResponses(transition, addressedFeedbackIds ?? [], feedbackResponses ?? []);
     const checked = validateTransitionConfig(project, transition, config);
@@ -321,6 +329,7 @@ export function configureTransition(id, transitionId, expectedInputRevision, con
     transition.source = `${author}-configured`; transition.codeHash = sha256(JSON.stringify(transitionConfig(transition)));
     invalidateResponses(transition);
     applyResponses(transition, responses, { codeHash: transition.codeHash, inputToken: transition.inputToken, author });
+    receiptDirectorCommit(project, transition, 'transition', directorOp);
     delete transition.validation;
     return project;
   });
@@ -359,9 +368,9 @@ export function saveJob(id, job) {
     .run(job.id, job.kind, job.status, JSON.stringify(job), Date.now()); }
   finally { db.close(); }
 }
-export function listJobs(id) {
+export function listJobs(id, limit = 40) {
   const db = open(id);
-  try { return db.prepare('SELECT data FROM jobs ORDER BY updated_at DESC LIMIT 40').all().map(parse); }
+  try { return db.prepare('SELECT data FROM jobs ORDER BY updated_at DESC LIMIT ?').all(Math.min(10000, Math.max(1, limit))).map(parse); }
   finally { db.close(); }
 }
 export function readJob(id, jobId) {

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { withFeedbackResponsesSchema } from './mcp-feedback-tools.ts';
 
-const properties = { projectId: { type: 'string' }, shotId: { type: 'string' }, transitionId: { type: 'string' }, expectedInputRevision: { type: 'integer', minimum: 0 } };
+const properties = { projectId: { type: 'string' }, shotId: { type: 'string' }, transitionId: { type: 'string' }, expectedInputRevision: { type: 'integer', minimum: 0 }, attemptToken: { type: 'string', description: '导演 claim 返回的 token；镜头 update/submit、转场 configure 时带上，以记录本次操作提交凭据。' } };
 const schema = (extra: Record<string, unknown>, required: string[]) => ({ type: 'object', properties: { ...properties, ...extra }, required });
 // FB-01 意见锚点参数（人从界面或 agent 代转述时都可携带）。
 const anchorSchema = { type: 'object', description: '定位锚点：t/range 落在目标时间窗内；lyricElementId 须存在于当前歌词方案；region 为 0..1 归一化区域', properties: {
@@ -18,6 +18,8 @@ export const projectToolDefinitions = withFeedbackResponsesSchema([
   { name: 'song_analysis_get', description: '读取新歌工程的分析（videograph-analysis/v2）。默认层 audio/rhythm/sections/lyrics；envelopes/onsets 需在 layers 中显式请求。可按 startTime/endTime（秒）过滤。返回 inputRevision 供后续写操作。', inputSchema: schema({ startTime: { type: 'number' }, endTime: { type: 'number' }, layers: { type: 'array', items: { type: 'string', enum: ['audio', 'rhythm', 'sections', 'lyrics', 'envelopes', 'onsets'] } } }, ['projectId']) },
   { name: 'song_lyrics_submit', description: '整层替换歌词（v2 结构：{ lines: [{ text, start, end, words: [{ w, start, end }] }] }，时间单位秒），用于修正误听/补词。经契约校验后工程回到 analysis-draft，需再次 song_analysis_confirm。', inputSchema: schema({ lyrics: { type: 'object' } }, ['projectId', 'expectedInputRevision', 'lyrics']) },
   { name: 'song_analysis_confirm', description: '确认分析：analysis-draft → analysis-confirmed，之后才能规划镜头。agent 可调用（记为 confirmedBy: mcp）；调用前先用 song_analysis_get 核对节拍/歌词/段落，明显误听先用 song_lyrics_submit 修正。', inputSchema: schema({}, ['projectId']) },
+  { name: 'song_analysis_retry', description: '重新排队 analysis-failed 的新歌分析；失败时不伪造分析结果。', inputSchema: schema({}, ['projectId']) },
+  { name: 'song_analysis_patch', description: '在规划前以工程版本修正 rhythm 或 sections 整层；成功后回到 analysis-draft，必须重新读取并确认。', inputSchema: schema({ patch: { type: 'object' }, author: { type: 'string', enum: ['mcp', 'human'] } }, ['projectId', 'expectedInputRevision', 'patch']) },
   { name: 'project_plan_submit', description: '仅 analysis-confirmed 可用。plan: [{ lineText | sectionIndex | t, title?, prompt?, id? }]，每项是一刀的锚点，服务端吸附到拍点且不切词，覆盖全曲；省略 plan 则用确定性兜底（每段一镜，标注非 AI 创作）。成功后工程 → planned，镜头 → needs-generation（project_shot_source 返回通用模板作为起点）。', inputSchema: schema({ plan: { type: 'array', items: { type: 'object' } }, reasoning: { type: 'string' } }, ['projectId', 'expectedInputRevision']) },
   { name: 'project_get', description: '读取工程、镜头版本与状态、BGM 分析来源；可选返回歌词/节拍分析。', inputSchema: schema({ includeAnalysis: { type: 'boolean' } }, ['projectId']) },
   { name: 'project_shot_lyrics', description: '读取目标镜头窗口内真实词级歌词与已有元素方案。先从歌词分析含义和具象/动作/隐喻元素，再用 project_shot_update 的 lyricPlan 保存引用、解释、视觉处理；引用会被校验。', inputSchema: schema({}, ['projectId', 'shotId']) },
@@ -56,16 +58,18 @@ export async function callProjectTool(name: string, args: Record<string, unknown
     path += `/song/analysis${query.size ? '?' + query : ''}`;
   }
   else if (name === 'song_analysis_confirm') { path += '/song/analysis/confirm'; body = { author: 'mcp' }; }
+  else if (name === 'song_analysis_retry') { path += '/song/analysis/retry'; body = {}; }
+  else if (name === 'song_analysis_patch') { path += '/song/analysis/patch'; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch, author: args.author ?? 'mcp' }; }
   else if (name === 'song_lyrics_submit') { path += '/song/lyrics'; body = { expectedInputRevision: args.expectedInputRevision, lyrics: args.lyrics, author: 'mcp' }; }
   else if (name === 'project_plan_submit') { path += '/plan'; body = { expectedInputRevision: args.expectedInputRevision, plan: args.plan, reasoning: args.reasoning, author: 'mcp' }; }
   else if (name === 'project_shot_lyrics') path += `/shots/${shotId}/lyrics`;
   else if (name === 'project_shot_source') path += `/shots/${shotId}/source`;
-  else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch }; }
-  else if (name === 'project_shot_submit') { path += `/shots/${shotId}/source`; body = { expectedInputRevision: args.expectedInputRevision, code: args.code, summary: args.summary, addressedFeedbackIds: args.addressedFeedbackIds, feedbackResponses: args.feedbackResponses, author: 'mcp' }; }
+  else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch, attemptToken: args.attemptToken }; }
+  else if (name === 'project_shot_submit') { path += `/shots/${shotId}/source`; body = { expectedInputRevision: args.expectedInputRevision, code: args.code, summary: args.summary, addressedFeedbackIds: args.addressedFeedbackIds, feedbackResponses: args.feedbackResponses, attemptToken: args.attemptToken, author: 'mcp' }; }
   else if (name === 'project_feedback_add') { path += `/shots/${shotId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text, anchor: args.anchor, preserve: args.preserve, author: 'mcp' }; }
   else if (name === 'project_transition_get') path += `/transitions/${transitionId}`;
-  else if (name === 'project_transition_update') { path += `/transitions/${transitionId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch }; }
-  else if (name === 'project_transition_configure') { path += `/transitions/${transitionId}/config`; body = { expectedInputRevision: args.expectedInputRevision, config: args.config, addressedFeedbackIds: args.addressedFeedbackIds, feedbackResponses: args.feedbackResponses, author: 'mcp' }; }
+  else if (name === 'project_transition_update') { path += `/transitions/${transitionId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch, attemptToken: args.attemptToken }; }
+  else if (name === 'project_transition_configure') { path += `/transitions/${transitionId}/config`; body = { expectedInputRevision: args.expectedInputRevision, config: args.config, addressedFeedbackIds: args.addressedFeedbackIds, feedbackResponses: args.feedbackResponses, attemptToken: args.attemptToken, author: 'mcp' }; }
   else if (name === 'project_transition_feedback_add') { path += `/transitions/${transitionId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text, anchor: args.anchor, preserve: args.preserve, author: 'mcp' }; }
   else if (name === 'project_transition_validate') { path += `/transitions/${transitionId}/validate`; body = {}; }
   else if (name === 'project_preview') { path += '/preview'; body = { shotId: args.shotId, transitionId: args.transitionId, version: args.version }; }

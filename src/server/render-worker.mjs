@@ -169,6 +169,7 @@ try {
     await loadShot(pair ? pair.right : target, previous);
     const readCode = (shot) => readFileSync(join(dir, `engine/app/src/scenes/${shot.module}.ts`), 'utf8');
     const dependency = incoming ? { config: transitionConfig(incoming), from: { start: previous.start, end: previous.end, params: previous.params, post: previous.post, code: readCode(previous) } } : null;
+    const artifactHash = (relative) => sha256(readFileSync(join(dir, relative)));
     const images = [];
     for (const [index, t] of stillsInput.times.entries()) {
       const time = Math.round(t * 1000) / 1000;
@@ -184,7 +185,7 @@ try {
         const png = await scalePng(page, await page.evaluate(() => window.__pdoom.png()), stillsInput.width);
         writeFileSync(file, Buffer.from(png, 'base64'));
       }
-      images.push({ t: time, file: `artifacts/${key}.png` });
+      images.push({ t: time, file: `artifacts/${key}.png`, contentHash: artifactHash(`artifacts/${key}.png`) });
       progress(`静帧 ${time.toFixed(3)}s · ${index + 1}/${stillsInput.times.length}`, (index + 1) / stillsInput.times.length);
     }
     const errors = await page.evaluate(() => window.__pdoom.errors);
@@ -238,7 +239,7 @@ try {
         }
         save(key, await page.evaluate(pageComposeGrid, { tiles, columns: input.columns, tileWidth: input.thumbWidth, title: `帧序列 · ${input.label} · ${input.times.length} 帧 · 橙框=下拍` }));
       }
-      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'filmstrip' }], times: input.times,
+      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'filmstrip', contentHash: sha256(readFileSync(join(dir, 'artifacts', `${key}.png`))) }], times: input.times,
         labels: input.times.map((t) => beatLabel(frozen.song, t, 0.5 / fps).text) };
       return;
     }
@@ -260,7 +261,7 @@ try {
         }
         save(key, await page.evaluate(pageComposeGrid, { tiles, columns: input.columns, tileWidth: input.thumbWidth, title: `全片缩略图 · ${shots.length} 镜头 · 每镜 ${input.ratios.length} 帧（${input.ratios.join('/')}）` }));
       }
-      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'contact-sheet' }],
+      job.result = { revision: frozen.revision, images: [{ file: `artifacts/${key}.png`, kind: 'contact-sheet', contentHash: sha256(readFileSync(join(dir, 'artifacts', `${key}.png`))) }],
         shots: shots.map((shot, index) => ({ index: index + 1, id: shot.id, title: shot.title, start: shot.start, end: shot.end, status: shot.status })) };
       return;
     }
@@ -300,7 +301,7 @@ try {
     const key = sha256(`${framesKey}:${RHYTHM_VERSION}`);
     if (!existsSync(join(dir, 'artifacts', `${key}.png`))) save(key, await page.evaluate(pageDrawChart, analysis.chart));
     writeFileSync(join(dir, 'artifacts', `${key}.json`), JSON.stringify({ text: analysis.text, metrics: analysis.metrics, bars: analysis.bars }));
-    job.result = { revision: frozen.revision, text: analysis.text, metrics: analysis.metrics, images: [{ file: `artifacts/${key}.png`, kind: 'rhythm-chart' }], report: `artifacts/${key}.json` };
+    job.result = { revision: frozen.revision, text: analysis.text, metrics: analysis.metrics, images: [{ file: `artifacts/${key}.png`, kind: 'rhythm-chart', contentHash: sha256(readFileSync(join(dir, 'artifacts', `${key}.png`))) }], report: `artifacts/${key}.json` };
   }
 
 

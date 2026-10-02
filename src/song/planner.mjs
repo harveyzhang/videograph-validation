@@ -24,7 +24,24 @@ function snapToFrame(t, fps) {
   return Math.round(t * fps) / fps;
 }
 
-/** 单个切点：锚定行（按文本匹配）→ 行首词前最近拍，且不落在任何词中间；器乐锚定段落起点。 */
+/** 锚点先量化到帧，再重新检查词窗口；量化后落词中时继续回退到前一拍。 */
+function safeBeatCut(analysis, beat, fps, label) {
+  if (beat !== null) {
+    const cut = Math.max(0, snapToFrame(beat, fps));
+    if (!midWord(analysis, cut)) return cut;
+  }
+  const beats = analysis.rhythm.beats;
+  for (let index = beats.length - 1; index >= 0; index--) {
+    if (beat === null || beats[index] > beat + EPS) continue;
+    const cut = Math.max(0, snapToFrame(beats[index], fps));
+    if (!midWord(analysis, cut)) return cut;
+  }
+  const cut = snapToFrame(0, fps);
+  if (!midWord(analysis, cut)) return cut;
+  throw new SongError(`切点无法避开词中间${label ? `（${label}）` : ''}`);
+}
+
+/** 单个切点：锚定行（按文本匹配）→ 行首词之前最近拍，帧吸附后仍避开词；器乐锚定段落起点。 */
 export function cutFromAnchor(analysis, anchor, { fps = 30 } = {}) {
   const duration = analysis.audio.duration;
   if (anchor.lineText !== undefined) {
@@ -32,21 +49,12 @@ export function cutFromAnchor(analysis, anchor, { fps = 30 } = {}) {
     const line = lines.find((entry) => entry.text === anchor.lineText)
       ?? lines.find((entry) => entry.text.includes(anchor.lineText));
     if (!line) throw new SongError(`锚定歌词行不存在：「${String(anchor.lineText).slice(0, 60)}」`);
-    let cut = previousBeat(analysis, line.words[0].start);
-    if (cut === null) cut = 0;
-    while (midWord(analysis, cut) && cut > 0) {
-      const beats = analysis.rhythm.beats;
-      const index = beats.indexOf(cut);
-      if (index <= 0) throw new SongError(`切点无法避开词中间（行「${line.text.slice(0, 40)}」）`);
-      cut = beats[index - 1];
-    }
-    if (midWord(analysis, cut)) throw new SongError(`切点落在一个词的中间（行「${line.text.slice(0, 40)}」）`);
-    return Math.max(0, snapToFrame(cut, fps));
+    return safeBeatCut(analysis, previousBeat(analysis, line.words[0].start), fps, `行「${line.text.slice(0, 40)}」`);
   }
   if (anchor.sectionIndex !== undefined) {
     const section = analysis.sections[anchor.sectionIndex];
     if (!section) throw new SongError(`锚定段落不存在：#${anchor.sectionIndex}`);
-    return Math.max(0, snapToFrame(section.start, fps));
+    return safeBeatCut(analysis, section.start, fps, `段落 #${anchor.sectionIndex}`);
   }
   if (anchor.t !== undefined) {
     const cut = snapToFrame(anchor.t, fps);
@@ -72,8 +80,7 @@ export function candidateCutPoints(analysis, { fps = 30, shotRange = DEFAULT_SHO
     }
   });
   for (const downbeat of analysis.rhythm.downbeats) {
-    const cut = snapToFrame(downbeat, fps);
-    if (!midWord(analysis, cut)) candidates.add(cut);
+    try { candidates.add(safeBeatCut(analysis, downbeat, fps, '小节线')); } catch { /* ignore */ }
   }
   return [...candidates].sort((a, b) => a - b);
 }
@@ -121,8 +128,10 @@ export function validatePlan(plan, analysis, { fps = 30, shotRange = DEFAULT_SHO
       source: 'ai-original',
     });
   }
-  for (let i = 1; i < shots.length; i++) {
-    if (shots[i].id === shots[i - 1].id) throw new SongError(`镜头 id 重复：${shots[i].id}`);
+  const ids = new Set();
+  for (const shot of shots) {
+    if (ids.has(shot.id)) throw new SongError(`镜头 id 重复：${shot.id}`);
+    ids.add(shot.id);
   }
   return { shots, warnings };
 }
@@ -130,7 +139,11 @@ export function validatePlan(plan, analysis, { fps = 30, shotRange = DEFAULT_SHO
 /** 确定性兜底规划：每段一个镜头。仅用于测试/兜底，明确标注不是 AI 创作。 */
 export function planFromSections(analysis, { fps = 30, shotRange = DEFAULT_SHOT_RANGE } = {}) {
   const duration = analysis.audio.duration;
-  const cuts = [0, ...analysis.sections.filter((section) => section.start > EPS && section.start < duration - EPS).map((section) => snapToFrame(section.start, fps))];
+  const cuts = [0, ...analysis.sections.flatMap((section, index) => {
+    if (section.start <= EPS || section.start >= duration - EPS) return [];
+    const cut = cutFromAnchor(analysis, { sectionIndex: index }, { fps });
+    return cut > EPS && cut < duration - EPS ? [cut] : [];
+  })];
   const unique = [...new Set(cuts)].sort((a, b) => a - b);
   if (unique[unique.length - 1] !== duration) unique.push(duration);
   const shots = [];

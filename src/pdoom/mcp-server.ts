@@ -14,13 +14,14 @@ import { fileURLToPath } from 'node:url';
 import { projectToolDefinitions, callProjectTool } from '../server/mcp-tools.ts';
 import { feedbackToolDefinitions, feedbackToolNames, callFeedbackTool, mcpToolResult } from '../server/mcp-feedback-tools.ts';
 import { aeToolDefinitions, aeToolNames, callAeTool } from '../server/mcp-ae-tools.ts';
+import { directorToolDefinitions, directorToolNames, callDirectorTool } from '../server/mcp-director-tools.ts';
 
 // VideoGraph = LLM 的 After Effects：本 server 是 LLM 操作工程的唯一入口（工具定义见 ../server/mcp-*.ts）。
 // 旧演示视图的 shot_queue_*、shot_cards_*、pdoom_*、lyric_research_draft 工具已于 CLEANUP-01 移除。
 
 const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 const server = new Server(
-  { name: 'videograph', version: '0.3.0' },
+  { name: 'videograph', version: '0.4.0' },
   { capabilities: { tools: {}, resources: {}, prompts: {} } },
 );
 
@@ -29,7 +30,7 @@ function textResult(value: unknown, isError = false) {
 }
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [...projectToolDefinitions, ...feedbackToolDefinitions, ...aeToolDefinitions],
+  tools: [...projectToolDefinitions, ...feedbackToolDefinitions, ...aeToolDefinitions, ...directorToolDefinitions],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -37,6 +38,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const args = request.params.arguments ?? {};
   const call = feedbackToolNames.has(name) ? callFeedbackTool
     : aeToolNames.has(name) ? callAeTool
+    : directorToolNames.has(name) ? callDirectorTool
     : projectToolDefinitions.some((tool) => tool.name === name) ? callProjectTool : null;
   if (!call) return textResult({ error: `Unknown tool: ${name}` }, true);
   try { return mcpToolResult(await call(name, args)); }
@@ -46,7 +48,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // AE-05：技法库与平台指南作为 MCP resources（只读；不暴露仓库其他文件）。
 function resourceList() {
   const entries = [{ uri: 'videograph://docs/mcp-guide', name: 'VideoGraph MCP 使用指南', file: 'docs/MCP-GUIDE.md' },
-    { uri: 'videograph://skills/shotcraft/SKILL.md', name: 'shotcraft 技法库总览', file: 'skills/shotcraft/SKILL.md' }];
+    { uri: 'videograph://skills/shotcraft/SKILL.md', name: 'shotcraft 技法库总览', file: 'skills/shotcraft/SKILL.md' },
+    { uri: 'videograph://skills/shotcraft/SOURCES.md', name: 'shotcraft 来源与许可', file: 'skills/shotcraft/SOURCES.md' },
+    { uri: 'videograph://skills/videograph-create/SKILL.md', name: 'AI 导演制作与恢复流程', file: '.agents/skills/videograph-create/SKILL.md' },
+    { uri: 'videograph://skills/videograph-create/aesthetic-review.md', name: 'AI 导演创作与审片准则', file: '.agents/skills/videograph-create/references/aesthetic-review.md' }];
   for (const file of readdirSync(join(productRoot, 'skills/shotcraft/references')).filter((name) => name.endsWith('.md')).sort()) {
     entries.push({ uri: `videograph://skills/shotcraft/references/${file}`, name: `shotcraft · ${file.replace(/\.md$/, '')}`, file: `skills/shotcraft/references/${file}` });
   }
@@ -71,6 +76,13 @@ const guideSection = (heading: RegExp) => {
   return next < 0 ? rest : rest.slice(0, next + 3);
 };
 const prompts = {
+  direct_video: {
+    description: '从工程意图推进 AI 导演闭环，或恢复中断的制作：下一步、claim、创作、真实审片证据、返工和交付。',
+    arguments: [{ name: 'projectId', description: '继续制作的工程 ID', required: true }],
+    text: (args: Record<string, string>) => `你是工程 ${args.projectId} 的导演与程序员，使用 project_director_next 获取当前事实和下一步任务。\n` +
+      readFileSync(join(productRoot, '.agents/skills/videograph-create/SKILL.md'), 'utf8') +
+      '\n服务不调用第二套模型：由你判断、写场景、查看真实图片。不能仅根据节奏指标声称审美通过；人工意见只能由人在界面采用。',
+  },
   respond_to_feedback: {
     description: '按标准流程处理人的修改意见：收件箱 → 上下文 → 看画面 → 改写 → 逐条响应 → 验证与自查 → 交给人确认。',
     arguments: [{ name: 'projectId', description: '只处理该工程（可省略，汇总全部工程）', required: false }],

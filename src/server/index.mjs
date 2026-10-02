@@ -5,12 +5,13 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
 import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, askFeedback, replyFeedback, feedbackInbox, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
-import { getSongAnalysis, confirmSongAnalysis, submitSongLyrics, submitPlan, retryAnalysis } from './song-project.mjs';
+import { getSongAnalysis, confirmSongAnalysis, submitSongLyrics, submitPlan, retryAnalysis, patchSongAnalysis } from './song-project.mjs';
 import { startReferenceServer } from './reference-server.mjs';
 import { feedbackTargetWindow } from './feedback.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
 import { startAnalysisWorker } from './analysis-jobs.mjs';
 import { cueSheet } from './rhythm.mjs';
+import { getDirector, submitDirector, claimDirector, completeDirector, submitReview, acceptDirectorReview, dispatchDirector, assertDirectorExport } from './director.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
 const allowedOrigins = new Set((process.env.VIDEOGRAPH_STUDIO_ORIGINS ?? 'http://127.0.0.1:5188,http://localhost:5188').split(',').map((origin) => origin.trim()).filter(Boolean));
@@ -114,6 +115,7 @@ function enqueue(projectId, kind, options) {
   if (kind === 'validate' && !project.shots.find((shot) => shot.id === options.shotId).module) throw new ProjectError('镜头还没有源码：先 project_shot_submit', 409);
   if (kind === 'export' && project.shots.some((shot) => !shot.module || shot.status === 'needs-generation')) throw new ProjectError('有镜头尚未生成源码（needs-generation）', 409);
   if (kind === 'export' && project.transitions.some((transition) => transition.status === 'needs-generation')) throw new ProjectError('有转场指导尚未落实为效果配置', 409);
+  if (kind === 'export') assertDirectorExport(project);
   let stills = null;
   if (kind === 'stills') {
     const shotTarget = options.shotId ? project.shots.find((shot) => shot.id === options.shotId) : null;
@@ -241,6 +243,18 @@ const server = createServer(async (req, res) => {
     if (parts[0] !== 'projects' || !safeId(parts[1])) throw new ProjectError('route not found', 404);
     const id = parts[1];
     if (parts.length === 2 && req.method === 'GET') { json(res, readProject(id)); return; }
+    if (parts[2] === 'director') {
+      if (req.method === 'GET' && parts.length <= 4) { json(res, getDirector(id)); return; }
+      if (req.method === 'POST') {
+        const input = await body(req);
+        if (parts.length === 3) { json(res, submitDirector(id, input.expectedProjectRevision, input.director, input.author ?? 'mcp')); return; }
+        if (parts[3] === 'claim') { json(res, claimDirector(id, input.actionId, input.owner, input.leaseSeconds)); return; }
+        if (parts[3] === 'complete') { json(res, completeDirector(id, input.actionId, input.attemptToken, input)); return; }
+        if (parts[3] === 'dispatch') { json(res, dispatchDirector(id, input.actionIds, input.attemptTokens, enqueue), 202); return; }
+        if (parts[3] === 'review') { json(res, submitReview(id, input.expectedProjectRevision, input.review)); return; }
+        if (parts[3] === 'accept-review') { json(res, acceptDirectorReview(id, input.expectedProjectRevision)); return; }
+      }
+    }
     if (parts[2] === 'jobs' && parts.length <= 4 && req.method === 'GET') {
       const wait = Number(url.searchParams.get('wait') ?? 0);
       json(res, parts[3] ? publicJob(wait > 0 ? await waitJob(id, parts[3], wait) : readJob(id, parts[3])) : { jobs: listJobs(id).map(publicJob) }); return;
@@ -265,12 +279,13 @@ const server = createServer(async (req, res) => {
     if (parts[2] === 'song' && parts[3] === 'analysis' && req.method === 'GET') { json(res, getSongAnalysis(id, url.searchParams)); return; }
     if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'confirm' && req.method === 'POST') { json(res, confirmSongAnalysis(id, (await body(req)).author ?? 'human')); return; }
     if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'retry' && req.method === 'POST') { json(res, retryAnalysis(id)); return; }
+    if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'patch' && req.method === 'POST') { const input = await body(req); json(res, patchSongAnalysis(id, input.expectedInputRevision, input.patch, input.author ?? 'human')); return; }
     if (parts[2] === 'song' && parts[3] === 'lyrics' && req.method === 'POST') { const input = await body(req); json(res, submitSongLyrics(id, input.expectedInputRevision, input.lyrics, input.author ?? 'human')); return; }
     if (parts[2] === 'plan' && req.method === 'POST') { const input = await body(req); json(res, submitPlan(id, input.expectedInputRevision, input.plan, input.reasoning, input.author ?? 'human')); return; }
     if (parts[2] === 'shots' && safeId(parts[3])) {
       if (parts[4] === 'lyrics' && req.method === 'GET') { json(res, readShotLyricContext(id, parts[3])); return; }
       if (parts[4] === 'source' && req.method === 'GET') { json(res, readShotSource(id, parts[3])); return; }
-      if (parts[4] === 'source' && req.method === 'POST') { const input = await body(req); json(res, submitShotSource(id, parts[3], input.expectedInputRevision, input.code, input.summary, input.addressedFeedbackIds, input.author, input.feedbackResponses)); return; }
+      if (parts[4] === 'source' && req.method === 'POST') { const input = await body(req); json(res, submitShotSource(id, parts[3], input.expectedInputRevision, input.code, input.summary, input.addressedFeedbackIds, input.author, input.feedbackResponses, input.attemptToken)); return; }
       if (parts[4] === 'feedback' && parts.length === 5 && req.method === 'POST') { const input = await body(req); json(res, addShotFeedback(id, parts[3], input.expectedInputRevision, { text: input.text, anchor: input.anchor, preserve: input.preserve, author: input.author })); return; }
       if (parts[4] === 'feedback' && safeId(parts[5]) && ['ask', 'reply'].includes(parts[6]) && req.method === 'POST') {
         const input = await body(req);
@@ -278,7 +293,7 @@ const server = createServer(async (req, res) => {
       }
       if (parts[4] === 'reject-feedback' && req.method === 'POST') { const input = await body(req); json(res, rejectShotFeedback(id, parts[3], input.expectedInputRevision)); return; }
       if (parts[4] === 'accept-feedback' && req.method === 'POST') { const input = await body(req); json(res, acceptShotFeedback(id, parts[3], input.expectedInputRevision, input.feedbackIds)); return; }
-      if (parts.length === 4 && req.method === 'POST') { const input = await body(req); json(res, updateShot(id, parts[3], input.expectedInputRevision, input.patch ?? {})); return; }
+      if (parts.length === 4 && req.method === 'POST') { const input = await body(req); json(res, updateShot(id, parts[3], input.expectedInputRevision, input.patch ?? {}, input.attemptToken)); return; }
     }
     if (parts[2] === 'transitions' && safeId(parts[3])) {
       const transitionId = parts[3];
@@ -291,7 +306,7 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === 'POST') {
         const input = await body(req);
-        if (parts[4] === 'config') { json(res, configureTransition(id, transitionId, input.expectedInputRevision, input.config, input.addressedFeedbackIds, input.author, input.feedbackResponses)); return; }
+        if (parts[4] === 'config') { json(res, configureTransition(id, transitionId, input.expectedInputRevision, input.config, input.addressedFeedbackIds, input.author, input.feedbackResponses, input.attemptToken)); return; }
         if (parts[4] === 'feedback' && parts.length === 5) { json(res, addShotFeedback(id, transitionId, input.expectedInputRevision, { text: input.text, anchor: input.anchor, preserve: input.preserve, author: input.author }, 'transition')); return; }
         if (parts[4] === 'feedback' && safeId(parts[5]) && parts[6] === 'ask') { json(res, askFeedback(id, 'transition', transitionId, parts[5], input.question, input.author ?? 'mcp')); return; }
         if (parts[4] === 'feedback' && safeId(parts[5]) && parts[6] === 'reply') { json(res, replyFeedback(id, 'transition', transitionId, parts[5], input.text, input.author ?? 'human')); return; }
@@ -351,7 +366,7 @@ server.listen(port, '127.0.0.1', () => {
   mkdirSync(dirname(tokenPath), { recursive: true });
   writeFileSync(tokenPath, serviceToken, { mode: 0o600 });
   // 不盲目重跑状态不明的旧进程；已完成分段仍可复用。
-  for (const project of listProjects()) for (const job of listJobs(project.id)) {
+  for (const project of listProjects()) for (const job of listJobs(project.id, 10000)) {
     if (job.kind === 'analysis') { if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启；工程仍为 analysis-pending 时会自动重新分析。' }); continue; }
     if (job.status === 'queued') queue.push({ projectId: project.id, jobId: job.id });
     else if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启，旧渲染进程未恢复；可重新发起并复用已完成分段。' });

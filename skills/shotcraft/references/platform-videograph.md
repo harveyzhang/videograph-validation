@@ -37,8 +37,7 @@ projects/<uuid>/
   `type.ts` 字体（Archivo 可变宽度 62–125/权重 300–900、IBM Plex Mono、Cormorant）、
   `stroke.ts` 单笔画字体、`_motifs.ts` 火花/面具。
 - Frame：`f.t/lt/p/a(六路包络+kick/snare/hat/vonset)/beat/beatPhase/bar/under/tin/tout`。
-- **本 skill 的 effects.md/shots.md 全部手法在本路线上原样可用**（范例代码就在
-  `engine/app/src/scenes/` 里，直接照抄模式）。
+- `effects.md`、`shots.md` 的技法是创作参考，不代表每个手法都能在本工程或当前引擎契约中原样实现；使用前以 `project_shot_source` 返回的真实 `Scene` 契约、可用素材与验证结果为准。范例代码只能迁移思路和已核实的引擎模式，不能承诺完整 AE 图层或效果市场能力。
 
 ### 工具链工作流（按序，勿跳步）
 
@@ -52,18 +51,27 @@ projects/<uuid>/
 | `project_create_from_audio` | `audioPath` | 任意本地音频建工程，可选 `name / lyricsText / lrcPath / language / stages`（`t0/t1/t… |
 | `project_create_from_bgm` | `audioPath` | `project_create_from_audio` 的别名（保留兼容） |
 | `project_get` | `projectId` | 完整工程：镜头、转场、意见、版本、输出规格。默认只返回歌曲摘要，`includeAnalysis: true` 返回完整词级歌词/节拍/包络 |
+| `project_director_get` | `projectId` | 读取导演方案、工程 `revision`、当前 `phase/actions/blockers/review/exportReady` 与规则… |
+| `project_director_next` | `projectId` | 返回当前下一步待办集合，结构同导演状态；按 action 顺序推进。analysis/retry/direction/plan action … |
+| `project_director_submit` | `projectId, expectedProjectRevision, director, author?` | 保存 brief/style/rhythm/shots/maxRepairs 并递增导演版本；规划前 shots 可为空，规划后必须补齐每镜 … |
+| `project_director_claim` | `projectId, actionId, owner, leaseSeconds?` | claim 制作/验证/审片/导出待办；leaseSeconds 为30..900、默认300。同 owner 有效续租返回原 token；返… |
+| `project_director_complete` | `projectId, actionId, attemptToken, outcome` | outcome 为 done/failed；可带 jobIds（≤100，默认[]）和 error。校验租约、当前目标、receipt 与真实… |
+| `project_director_dispatch` | `projectId, actionIds, attemptTokens` | 1..100个唯一 actionId，token 数组按位置对应、先 claim；只入队 validate/validate-transiti… |
+| `project_review_submit` | `projectId, expectedProjectRevision, review` | 提交 summary/七项 assessments/evidence/issues/protect；结构见 §6。真实当前证据覆盖每镜 sti… |
 | `song_analysis_get` | `projectId` | 读取 `videograph-analysis/v2` 分析与 `provenance`、当前 `inputRevision`。默认层 `au… |
 | `song_lyrics_submit` | `projectId, expectedInputRevision, lyrics` | 整层替换歌词：`{ lines: [{ text, start, end, words: [{ w, start, end }] }], la… |
 | `song_analysis_confirm` | `projectId` | 确认分析，`analysis-draft → analysis-confirmed`。agent 可调用，记为 `confirmedBy: m… |
+| `song_analysis_retry` | `projectId` | 仅 `analysis-failed` 可重试，重新排队分析并转 `analysis-pending`；等 `project_get` 返回 … |
+| `song_analysis_patch` | `projectId, expectedInputRevision, patch` | 仅规划前的 `analysis-draft / analysis-confirmed` 可用；以工程版本整层替换 `patch.rhythm`… |
 | `project_plan_submit` | `projectId, expectedInputRevision` | 仅 `analysis-confirmed` 可用。`plan: [{ lineText | sectionIndex | t, title?… |
 | `project_shot_lyrics` | `projectId, shotId` | 镜头窗口内词级歌词、`instrumental` 标记、已有 `lyricPlan` |
 | `project_shot_source` | `projectId, shotId` | `{ shot, code, contract, lyricContext, source }`：当前真实 TS 源码与完整引擎契约（ENGI… |
-| `project_shot_update` | `projectId, shotId, expectedInputRevision, patch` | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `… |
-| `project_shot_submit` | `projectId, shotId, expectedInputRevision, code` | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`feedbackResponses: [{ feedbac… |
+| `project_shot_update` | `projectId, shotId, expectedInputRevision, patch`（导演制作 acti… | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `… |
+| `project_shot_submit` | `projectId, shotId, expectedInputRevision, code`（导演制作 actio… | 提交**完整**场景文件（无 markdown 围栏），可带 `summary`、`feedbackResponses: [{ feedbac… |
 | `project_feedback_add` | `projectId, shotId, expectedInputRevision, text` | 新增镜头意见（≤8000 字符），可带 `anchor`（`t/range/lyricElementId/region/aspect`，服务端… |
 | `project_transition_get` | `projectId, transitionId` | 转场节点、意见、配置、前后镜头元素方案、准确时间窗 |
 | `project_transition_update` | `projectId, transitionId, expectedInputRevision, patch` | patch 仅 `intent / locked`；新 intent → `needs-generation`，需随后 configure |
-| `project_transition_configure` | `projectId, transitionId, expectedInputRevision, config` | `config: { mode, duration ≤1.5, easing, direction }`，可带 `feedbackRespon… |
+| `project_transition_configure` | `projectId, transitionId, expectedInputRevision, config`（导演… | `config: { mode, duration ≤1.5, easing, direction }`，可带 `feedbackRespon… |
 | `project_transition_feedback_add` | `projectId, transitionId, expectedInputRevision, text` | 新增转场意见（可带 `anchor/preserve`，锚点窗口为前后镜头合并窗口），同时冻结两侧镜头版本 |
 | `project_transition_validate` | `projectId, transitionId` | 后台抽检切点前后 5 帧，返回 job |
 | `project_feedback_inbox` | — | 可选 `projectId`、`status`（默认 `pending`；`open` 为全部未接受）。agent 的入口：返回每条意见的目标… |
@@ -83,27 +91,22 @@ projects/<uuid>/
 硬规则：AI 不能接受意见。 只改目标：`project_shot_submit` 只作用于一个镜头并生成不可变的新源码文件；不要借响应一条意见顺手重写其他镜头。 保留原始意图：不要用 `project_shot_update` 把人的意见写进 `prompt` 覆盖原文；意见本身已单独保存。 锁定的镜头/转场必须由人解锁后才能修改；不要自行解锁来完成任务。 时间一律从分析数据推导（词起点、拍点），不在场景代码里硬编码秒数。 有未接受意见或 `needs-generation` 的镜头/转场时，`project_render` 会被拒绝，这是预期行为。
 <!-- END:generated-from-MCP-GUIDE -->
 
-1. `project_list` / `project_get`：读工程、镜头卡片（id/标题/时间窗/提示词/状态/当前版本）。
+新歌创建与分析确认按 `docs/MCP-GUIDE.md` §4 和 `.agents/skills/videograph-create/SKILL.md` 执行；以下是既有工程的逐镜操作，不是另一套工坊队列流程。
+
+1. `project_list` / `project_get` 与 `project_director_get/next`：读工程、导演 phase/actions/blockers 与镜头版本。恢复时查 `project_feedback_inbox` 和 `project_job_get`，复用当前签名匹配的任务与成果，不重复建工程。规划和节奏调整前读 `song_cue_sheet`，先保存导演方案；plan 后补齐每镜制作 brief。制作前 claim 当前 action 并保存 attemptToken，长任务在租约到期前续租。
 2. `project_shot_lyrics`：读目标镜头窗口内的**词级歌词**；同时把视觉构思写成 `lyricPlan`
    （summary + elements[]，每个 element = `{kind: entity|action|metaphor, quote, meaning,
    treatment, cueWord?}`——**quote 必须是真实歌词原文，会被校验**），用
-   `project_shot_update` 保存。先想清楚"这句词怎么变成画面"再动代码。
+   `project_shot_update` 带 claim 的 `attemptToken` 保存，并重读目标版本。先想清楚"这句词怎么变成画面"再动代码；器乐不伪造歌词元素。
 3. `project_shot_source`：读该镜头**当前真实 TS 源码 + 完整引擎契约**。改代码基于它，不要凭空写。
 4. `project_shot_submit`：提交**完整文件**（不带 markdown 围栏），必须带
-   `expectedInputRevision`（并发控制；revision 不匹配先重读）。保存为不可变新版本、标记待验证。
-   若本次修改响应了某些 pending 反馈，把反馈 id 放进 `addressedFeedbackIds`——注意这只是
-   "已响应"标记，**是否采用由用户在界面确认**。
-5. `project_validate`：后台编译+抽检 5 帧 → `project_job_get` 查结果（错误/静帧地址）。
-   **通过 ≠ 审美通过**——用 `project_preview` 人工看，`artifacts/` 里的 png 用 Read 看。
-6. 转场：`project_transition_get` 读相邻镜头间的转场节点与准确时间窗；
-   `project_transition_configure` 配置 `{mode: cut|dissolve|wipe|dip, duration ≤1.5s,
-   easing: linear|smooth, direction: left|right}`——**新配置需预览验证**；
-   `project_transition_validate` 抽检切点前后 5 帧；指导性意见走 `project_transition_update`
-   （新的指导标为待配置，不会假装效果已变）。
-7. 反馈回路：人的修改意见经 `project_feedback_add` 成为独立反馈节点（保留原始 prompt 与
-   修改前版本，只影响目标镜头）；改代码时在 submit 里带上 `addressedFeedbackIds`。
-8. 出片：`project_render`（fps 24/30/60，samples 1/4/12）后台导出 MP4 → `project_job_get` 查进度。
-   锁定（locked）镜头要先 `project_shot_update` 解锁才能改。
+   最新目标 `expectedInputRevision` 与 claim 的 `attemptToken`（并发控制；版本/租约不匹配先重读）。保存不可变新版本与真实 receipt，标记待验证；complete 制作 action 不等于验证或人已采用。
+   若本次修改响应了 pending 反馈，优先用 `feedbackResponses` 逐条说明 `outcome/how`（partial 必须说明）；`addressedFeedbackIds` 仅保留兼容——这些只是“已响应”记录，**是否采用由用户在界面确认**。
+5. `project_validate`：后台编译+抽检 5 帧 → `project_job_get` 查结果（错误/单张缩略图地址）。
+   **通过 ≠ 审美通过**——用 `project_stills` 看多个时点，`project_filmstrip` 看连续动作/冲击起落，`project_rhythm_report` 按镜头或段落量节奏；有条件时再用 `project_preview` 播放，`artifacts/` 里的 png 用 Read 看。问题定位并复验，风格提示按设计意图判断，不强求每拍都有画面冲击。
+6. claim 转场 action 后，`project_transition_get` 读相邻镜头节点与准确时间窗；`project_transition_configure` 必须带 `attemptToken`，配置 `{mode: cut|dissolve|wipe|dip, duration ≤1.5s, easing: linear|smooth, direction: left|right}` 并生成 receipt——**新配置需预览验证**。随后 complete 制作 action，再 claim/dispatch `project_transition_validate`，抽检切点前后 5 帧；非硬切必须用 `project_filmstrip({projectId,transitionId})` 留动态证据。指导性意见走 `project_transition_update`（新的指导标为待配置，不会假装效果已变）。
+7. 反馈回路：人的修改意见经 `project_feedback_add` 成为独立反馈节点（保留原始 prompt 与修改前版本，只影响目标镜头）；改代码时在 submit/configure 中带上 claim 的 `attemptToken` 和 `feedbackResponses` 并复验。含糊意见先 `project_feedback_ask`，锁定镜头/转场必须等待人解锁；AI 不得自行解锁或替人接受。响应制作 action 后 complete，再按 next 领取修复或验证。
+8. 出片前：按 next 领取并 dispatch/完成每镜 stills+filmstrip、非硬切转场 filmstrip、全片 contact-sheet+rhythm；用 `project_review_submit` 写七项 assessments、证据 job/file/t/observation、issues（blocking/warning/intentional）和 protect。记录服务签名与当前输入版本；修改后旧证据不算新版本通过。AI 自评不等于人的采用，不能绕过未接受意见等闸门。只有 `exportReady:true` 才 claim export，dispatch 或 `project_render`（fps 24/30/60，samples 1/4/12）后台导出 MP4 → `project_job_get` → complete，再核对成片音轨、时长和接缝。
 
 ### 铁律
 
@@ -118,4 +121,10 @@ projects/<uuid>/
 `src/song/data/full-song.json`：`{ song, bpm, duration, envFps, lines[](词级), sections[], beats[],
 downbeats[], kick[](强度对), snare[], rms/low/mid/high/vocal/drums[] }`——从 pdoom-video 的
 data/*.json 切出，工程服务建工程（指纹导入）时读取。
-换歌 = 重新生成该数据集（SONG 冲刺的通用分析管线），契约不变。
+该文件是参考指纹导入的数据源，不是新歌工程的通用歌词来源。新歌走 `project_create_from_audio` 的独立分析流程，以 `song_analysis_get` 返回的本工程分析和 `project_shot_source` 契约为准；没有歌词时不得套用原曲歌词。
+
+### 导演入口与 skill 读取
+
+同一个 agent 完成导演规划、逐镜执行和证据化自评，不要求第二套模型。server `videograph` 0.4.0 的 MCP resources 可读取 `videograph://docs/mcp-guide`、`videograph://skills/shotcraft/SKILL.md`、`videograph://skills/shotcraft/SOURCES.md` 与 shotcraft references；制片 skill 和审片准则分别用 `videograph://skills/videograph-create/SKILL.md`、`videograph://skills/videograph-create/aesthetic-review.md`。导演 prompt 为 `direct_video({projectId})`，只提供流程指导，不能替代工程当前事实。
+
+`project_director_get/next` 返回 phase/actions/blockers/review/exportReady 与工程 revision，并返回 active operation 的 `resumable`（actionId/kind/targetId/owner/attemptToken/leaseExpiresAt/expired/receipt/jobIds）。方案、自评使用 `expectedProjectRevision`，目标写入使用目标 `expectedInputRevision`。规划前导演 shots 可空，plan 后用 `project_director_submit` 补齐每镜 subject/action/entrance/exit 再制作。领取 action 的 `id` 作为 actionId，claim 返回 `operation.attemptToken`；镜头 update 只记录 cursorToken，随后 submit 与转场 configure 才形成 receipt，complete 校验真实结果。源码提交后 next 可能只显示验证 action，原制作必须用 resumable 完成；dispatch 只入队已 claim 的确定性验证/审片/export，done 未 complete 的同版本 job 也可复用，不创作源码或调用模型。真实审片证据必须覆盖每镜 stills+filmstrip、非硬切转场 filmstrip、全片 contact-sheet+rhythm，再 `project_review_submit`；签名过期、blocking、技术或人工闸门不通过时不能导出。有限修复预算按目标汇总。分析 retry 仅 failed 状态；patch 仅规划前全层 rhythm/sections，之后需重读确认。完整契约与租约规则见 MCP-GUIDE §6。

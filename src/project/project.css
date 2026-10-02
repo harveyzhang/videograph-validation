@@ -195,12 +195,26 @@ body {
 .project-canvas-area > .canvas-toolbar span { color: var(--text-tertiary); font-size: var(--text-xs); }
 .project-canvas-area > .react-flow { flex: 1; min-height: 0; }
 
+/* ReactFlow Node Base - Force dark background */
+.react-flow__node { background: transparent !important; }
+
+/* ReactFlow Controls & MiniMap */
+.react-flow__controls { background: var(--surface-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.react-flow__controls-button { background: transparent; border: none; border-bottom: 1px solid var(--border-default); color: var(--text-secondary); transition: background-color 0.15s ease; }
+.react-flow__controls-button:hover { background: var(--surface-3); color: var(--text-primary); }
+.react-flow__controls-button:last-child { border-bottom: none; }
+.react-flow__controls-button svg { fill: currentColor; }
+.react-flow__minimap { background: var(--surface-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.react-flow__minimap-mask { fill: var(--surface-1); opacity: 0.7; }
+.react-flow__minimap-node { fill: var(--surface-3); stroke: var(--border-default); }
+.react-flow__attribution { display: none; }
+
 /* Shot Node */
 .project-shot-node { width: 240px; }
 .project-shot-node .node-header { min-height: 44px; background: var(--node-shot-header); }
 .project-shot-node .node-header > svg:last-child { margin-left: auto; }
 .project-shot-node img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--radius-sm); }
-.project-thumb-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--space-3); aspect-ratio: 16 / 9; background: var(--widget); border-radius: var(--radius-sm); color: var(--text-muted); font-size: var(--text-xs); }
+.project-thumb-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--space-3); aspect-ratio: 16 / 9; background: var(--widget) !important; border-radius: var(--radius-sm); color: var(--text-muted); font-size: var(--text-xs); }
 .project-shot-status { font-size: var(--text-xs); color: var(--text-primary); }
 .project-shot-time { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
 
@@ -426,5 +440,115 @@ body {
 .fb-compare-column iframe { width: 100%; height: 380px; border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .fb-compare-note { color: var(--text-tertiary); font-size: var(--text-xs); }
 .fb-compare-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ============================================================
+   ReactFlow Dark Theme Override
+   ============================================================ */
+
+/* 画布背景 - 使用深色 */
+.react-flow {
+  background: var(--surface-1);
+}
+
+/* 背景点网格 - 深色主题 */
+.react-flow__background {
+  background-color: var(--surface-1);
+}
+
+.react-flow__background-pattern {
+  stroke: var(--border-subtle);
+  opacity: 0.3;
+}
+
+/* 边线 - 使用深色 */
+.react-flow__edge-path {
+  stroke: var(--border-default);
+  stroke-width: 1.5px;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+/* MiniMap - 深色主题 */
+.react-flow__minimap {
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+}
+
+.react-flow__minimap-mask {
+  fill: var(--accent-subtle);
+  stroke: var(--accent);
+}
+
+.react-flow__minimap-node {
+  fill: var(--surface-3);
+  stroke: var(--border-default);
+}
+
+/* Controls - 深色主题 */
+.react-flow__controls {
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+
+.react-flow__controls-button {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.react-flow__controls-button:hover {
+  background: var(--surface-3);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* 选择框 - 使用主题色 */
+.react-flow__selection {
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+}
+
+/* 节点拖动时的阴影 */
+.react-flow__node.dragging {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Panel - 深色背景 */
+.react-flow__panel {
+  color: var(--text-primary);
+}
 .fb-compare-modal footer { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+
+/* Song stages / read-only director — append-only UI integration. */
+.song-stage, .director-panel { display: grid; gap: var(--space-2); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border-default); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.song-stage-facts, .director-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-2); margin: var(--space-2) 0; }
+.director-facts > div { display: contents; }
+.song-stage-facts dt, .director-facts dt { color: var(--text-muted); }
+.song-stage-facts dd, .director-facts dd { margin: 0; white-space: pre-wrap; }
+.song-stage-lyrics { max-height: 220px; overflow: auto; padding-left: var(--space-4); margin: 0; }
+.song-stage-lyrics li { margin: var(--space-1) 0; }
+.song-stage-lyrics span { color: var(--text-muted); margin-right: var(--space-2); }
+.song-stage-error, .director-error { color: var(--semantic-error); white-space: pre-wrap; margin: 0; overflow-wrap: anywhere; }
+.director-panel .sidebar-title { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.director-panel summary { cursor: pointer; color: var(--text-primary); padding: var(--space-1) 0; }
+.director-panel p { margin: var(--space-1) 0; white-space: pre-wrap; }
+.director-phase { color: var(--text-secondary); }
+.director-warning { color: var(--semantic-warning); }
+.director-ready { color: var(--semantic-success); }
+.director-section { display: grid; gap: var(--space-1); border-top: 1px solid var(--border-subtle); padding-top: var(--space-2); }
+.director-section h3 { margin: 0; font-size: var(--text-xs); }
+.director-list { display: grid; gap: var(--space-2); margin: 0; padding-left: var(--space-4); }
+.director-list li { padding: var(--space-2); background: var(--widget); border-radius: var(--radius-sm); }
+.director-list li[data-blocked="true"] { border-left: 2px solid var(--semantic-warning); }
+.director-list a { display: block; margin-top: var(--space-1); }
+.director-subtitle { display: block; margin-top: var(--space-2); }
+.director-json { margin: var(--space-1) 0; padding: var(--space-2); max-height: 260px; overflow: auto; background: var(--surface-1); border-radius: var(--radius-sm); font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+.project-jobs small { display: block; color: var(--text-muted); overflow-wrap: anywhere; }
 

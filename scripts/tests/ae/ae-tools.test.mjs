@@ -81,10 +81,14 @@ test('注册：server 名、AE 工具、resources 与 prompts', async () => {
   const resources = (await client.listResources()).resources.map((resource) => resource.uri);
   assert.ok(resources.includes('videograph://docs/mcp-guide'));
   assert.ok(resources.includes('videograph://skills/shotcraft/references/transitions.md'));
+  assert.ok(resources.includes('videograph://skills/videograph-create/SKILL.md'));
+  assert.ok(resources.includes('videograph://skills/videograph-create/aesthetic-review.md'));
+  assert.ok(names.includes('project_director_next'));
+  assert.ok(names.includes('song_analysis_patch'));
   const guide = await client.readResource({ uri: 'videograph://skills/shotcraft/SKILL.md' });
   assert.match(guide.contents[0].text, /五条通用法则/);
   const prompts = (await client.listPrompts()).prompts.map((prompt) => prompt.name);
-  assert.deepEqual(prompts.sort(), ['design_rhythm', 'respond_to_feedback']);
+  assert.deepEqual(prompts.sort(), ['design_rhythm', 'direct_video', 'respond_to_feedback']);
   const prompt = await client.getPrompt({ name: 'respond_to_feedback', arguments: { projectId } });
   assert.match(prompt.messages[0].content.text, /project_feedback_inbox|收件箱/);
   assert.match(prompt.messages[0].content.text, /AI 不能接受意见/);
