@@ -14,17 +14,21 @@ const signature = (value) => sha256(JSON.stringify(value));
 
 export function analysisSignature(project) { return signature({ audio: project.audio.hash, song: project.song }); }
 const targetData = (target) => target && ({ id: target.id, token: target.inputToken, start: target.start, end: target.end, module: target.module, code: target.codeHash, params: target.params, post: target.post, mode: target.mode, duration: target.duration, from: target.fromShotId, to: target.toShotId });
+// 旧任务快照可能缺 shots/transitions（2026-09-30 前的反馈流程）；缺数组按空算，签名自然不匹配而非崩溃。
+const targetArrays = (project) => ({ shots: project.shots ?? [], transitions: project.transitions ?? [] });
 export function productionSignature(project) {
-  return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, shots: project.shots.map(targetData), transitions: project.transitions.map(targetData) });
+  const { shots, transitions } = targetArrays(project);
+  return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, shots: shots.map(targetData), transitions: transitions.map(targetData) });
 }
 function scopeSignature(project, kind, targetId) {
+  const { shots, transitions } = targetArrays(project);
   if (kind === 'shot') {
-    const target = project.shots.find((s) => s.id === targetId);
-    return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, target: targetData(target), transitions: project.transitions.filter((t) => t.fromShotId === targetId || t.toShotId === targetId).map((t) => ({ ...targetData(t), sides: project.shots.filter((s) => s.id === t.fromShotId || s.id === t.toShotId).map(targetData) })) });
+    const target = shots.find((s) => s.id === targetId);
+    return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, target: targetData(target), transitions: transitions.filter((t) => t.fromShotId === targetId || t.toShotId === targetId).map((t) => ({ ...targetData(t), sides: shots.filter((s) => s.id === t.fromShotId || s.id === t.toShotId).map(targetData) })) });
   }
   if (kind === 'transition') {
-    const t = project.transitions.find((entry) => entry.id === targetId);
-    return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, target: targetData(t), sides: project.shots.filter((s) => s.id === t?.fromShotId || s.id === t?.toShotId).map(targetData) });
+    const t = transitions.find((entry) => entry.id === targetId);
+    return signature({ engine: project.engineHash, analysis: analysisSignature(project), output: project.output, direction: project.director?.version, target: targetData(t), sides: shots.filter((s) => s.id === t?.fromShotId || s.id === t?.toShotId).map(targetData) });
   }
   return productionSignature(project);
 }

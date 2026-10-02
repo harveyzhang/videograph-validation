@@ -164,3 +164,13 @@ test('回归：没有导演方案的已有工程（参考导入/旧工程）读�
   assert.ok(state.actions.every((action) => !action.blocked));
   assert.equal(state.exportReady, false);
 });
+
+test('回归：旧任务快照缺 shots/transitions（2026-09-30 前的反馈流程）时签名不崩溃，正常工程签名不变', () => {
+  const id = fixture();
+  const project = store.readProject(id);
+  const normal = director.productionSignature(project);
+  assert.equal(director.productionSignature(structuredClone(project)), normal, '正常工程签名稳定');
+  const { transitions, ...legacy } = project;
+  assert.doesNotThrow(() => director.productionSignature(legacy));
+  assert.notEqual(director.productionSignature(legacy), normal, '缺字段的旧快照签名自然不匹配');
+});
