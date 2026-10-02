@@ -174,3 +174,15 @@ test('回归：旧任务快照缺 shots/transitions（2026-09-30 前的反馈流
   assert.doesNotThrow(() => director.productionSignature(legacy));
   assert.notEqual(director.productionSignature(legacy), normal, '缺字段的旧快照签名自然不匹配');
 });
+
+test('导演工程：AI 无 attemptToken 的写入被拒（不能绕过修复预算），人在界面的编辑照常', () => {
+  const id = fixture();
+  attach(id);
+  const p = store.readProject(id);
+  const shot = p.shots[0];
+  assert.throws(() => store.submitShotSource(id, shot.id, shot.inputRevision, fixtureScene(40), 'bypass', [], 'mcp'), /必须带 project_director_claim 返回的 attemptToken/);
+  assert.throws(() => store.updateShot(id, shot.id, shot.inputRevision, { params: { x: 1 } }, undefined, 'mcp'), /attemptToken/);
+  const t = p.transitions[0];
+  assert.throws(() => store.configureTransition(id, t.id, t.inputRevision, { mode: 'cut', duration: 0 }, [], 'mcp'), /attemptToken/);
+  assert.doesNotThrow(() => store.submitShotSource(id, shot.id, shot.inputRevision, fixtureScene(41), '人工源码编辑', [], 'human'));
+});

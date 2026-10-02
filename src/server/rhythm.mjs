@@ -151,7 +151,7 @@ export function cueSheet(song, { start = 0, end = Infinity, shots = [], transiti
 // ---------------------------------------------------------------------- AE-04 节奏报告
 
 /** 指标算法版本：改阈值/规则时递增，渲染进程据此重算报告（采样帧缓存不受影响）。 */
-export const RHYTHM_VERSION = 'rhythm-v5';
+export const RHYTHM_VERSION = 'rhythm-v7';
 
 /**
  * 画面运动等级 1–5（小节内帧间平均灰度差，0..1；64×36、每格 8×8 子采样，15–30fps）。
@@ -159,7 +159,15 @@ export const RHYTHM_VERSION = 'rhythm-v5';
  * 也就是说，参考片自身的五个等级大致各占 1/5。等级 1 ≈ 接近静止，等级 5 ≈ 参考片里最激烈的那 1/5。
  */
 export const VISUAL_THRESHOLDS = [0.014, 0.021, 0.033, 0.049];
-const visualLevel = (motion) => 1 + VISUAL_THRESHOLDS.filter((cut) => motion > cut).length;
+/**
+ * 相对运动等级（rhythm-v6 起用于“画面”列与死区/过忙判断）：小节运动 ÷ 画面墨量（ink，帧内像素偏离本帧中位亮度的平均量）。
+ * 含义是“可见内容里有多大比例在变”，细线/小主体的构图不会因为画面暗、线条细被判成静止。
+ * 阈值同样取 pdoom 参考片全片小节相对运动的五分位（见 ROADMAP AE-04 校准记录）；ink 低于 INK_FLOOR 的近黑画面按 INK_FLOOR 计，避免除零放大。
+ */
+export const REL_THRESHOLDS = [0.24, 0.40, 0.51, 0.73];
+export const INK_FLOOR = 0.01;
+const levelOf = (value, cuts) => 1 + cuts.filter((cut) => value > cut).length;
+const visualLevel = (motion) => levelOf(motion, VISUAL_THRESHOLDS);
 
 function pearson(a, b) {
   const n = Math.min(a.length, b.length);
@@ -196,6 +204,9 @@ export function motionPeaks(times, motion) {
  */
 export function analyzeRhythm(song, series, { shots = [], label = '' } = {}) {
   const { fps, t: times, motion, luma } = series;
+  const ink = Array.isArray(series.ink) && series.ink.length === times.length ? series.ink : null;
+  // 等级用 1/15 秒间隔的运动（与参考片校准口径一致）；缺省回退相邻帧运动。
+  const levelMotion = Array.isArray(series.levelMotion) && series.levelMotion.length === times.length ? series.levelMotion : motion;
   if (!times.length) throw new Error('没有采样帧');
   const start = times[0], end = times[times.length - 1] + 1 / fps;
   const tolerance = Math.max(2.5 / fps, 0.08);
@@ -235,11 +246,14 @@ export function analyzeRhythm(song, series, { shots = [], label = '' } = {}) {
   const { bars: allBars } = barGrid(song);
   const audio = audioLevels(song, allBars);
   const bars = allBars.map((bar, index) => ({ bar, audio: audio[index] })).filter(({ bar }) => bar.end > start && bar.start < end).map(({ bar, audio: audioLevel }) => {
-    const own = times.map((t, i) => (t >= bar.start && t < bar.end ? motion[i] : null)).filter(finite);
+    const own = times.map((t, i) => (t >= bar.start && t < bar.end ? levelMotion[i] : null)).filter(finite);
     const motionMean = mean(own);
+    const inkMean = ink ? mean(times.map((t, i) => (t >= bar.start && t < bar.end ? ink[i] : null)).filter(finite)) : null;
+    const rel = inkMean === null ? null : motionMean / Math.max(inkMean, INK_FLOOR);
     const downbeat = events.downbeat.find((t) => t >= bar.start - 1e-3 && t < bar.end - 1e-3);
     const downbeatHit = downbeat === undefined ? null : (() => { const peak = nearestPeak(downbeat); return !!peak && Math.abs(peak.t - downbeat) <= tolerance; })();
-    return { index: bar.index, start: bar.start, end: bar.end, audio: audioLevel, visual: own.length ? visualLevel(motionMean) : null, motion: +motionMean.toFixed(4), downbeatHit };
+    return { index: bar.index, start: bar.start, end: bar.end, audio: audioLevel, visual: !own.length ? null : rel === null ? visualLevel(motionMean) : levelOf(rel, REL_THRESHOLDS), absVisual: own.length ? visualLevel(motionMean) : null,
+      motion: +motionMean.toFixed(4), ink: inkMean === null ? null : +inkMean.toFixed(4), rel: rel === null ? null : +rel.toFixed(4), downbeatHit };
   });
   const runs = (predicate, minLength) => {
     const found = []; let current = [];
@@ -332,14 +346,26 @@ export function analyzeRhythm(song, series, { shots = [], label = '' } = {}) {
 // gray 为等尺寸 Uint8Array 灰度帧序列；跨镜头处与上一帧比较照常进行（切镜本身就是画面事件）。
 const LINEAR = Array.from({ length: 256 }, (_, v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
 /** 帧间运动（灰度码值差，0..1）与平均线性相对亮度（闪光判断用，0..1）。 */
-export function motionSeries(frames) {
-  const motion = [], luma = [];
+/** stride：等级用运动按 1/15 秒间隔取差（stride = 采样帧率/15），使不同采样帧率的等级可比；峰值检测仍用相邻帧。 */
+export function motionSeries(frames, stride = 1) {
+  const motion = [], luma = [], ink = [], levelMotion = [];
   for (let i = 0; i < frames.length; i++) {
     const frame = frames[i], previous = frames[i - 1];
     let sum = 0, diff = 0;
     for (let p = 0; p < frame.length; p++) { sum += LINEAR[frame[p]]; if (previous) diff += Math.abs(frame[p] - previous[p]); }
     luma.push(sum / frame.length);
     motion.push(previous ? diff / frame.length / 255 : 0);
+    const back = frames[i - stride];
+    if (stride === 1) levelMotion.push(motion[i]);
+    else { let d = 0; if (back) for (let p = 0; p < frame.length; p++) d += Math.abs(frame[p] - back[p]); levelMotion.push(back ? d / frame.length / 255 : null); }
+    // 墨量：像素偏离本帧中位亮度的平均量（背景近似为中位数）；用直方图求中位数，O(n)。
+    const histogram = new Uint32Array(256);
+    for (let p = 0; p < frame.length; p++) histogram[frame[p]]++;
+    let count = 0, middle = 0;
+    for (; middle < 256; middle++) { count += histogram[middle]; if (count * 2 >= frame.length) break; }
+    let spread = 0;
+    for (let p = 0; p < frame.length; p++) spread += Math.abs(frame[p] - middle);
+    ink.push(spread / frame.length / 255);
   }
-  return { motion, luma };
+  return { motion, luma, ink, levelMotion };
 }

@@ -147,7 +147,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_rhythm_report` | `projectId` | 顺序渲染目标时间段（范围参数同 filmstrip；`sampleFps` 10–60，默认 ≤30 秒用工程帧率、更长用 15），返回文本报告 + 对照图：下拍/强 kick/强 snare 命中率与中位偏移（正=画面滞后）、高能量小节下拍命中率、画面峰在拍上的比例、与鼓点包络的相关与最佳偏移、死区、闪烁（线性亮度近似 WCAG，>3 次/秒告警）、切点离拍距离、逐小节“音乐能量 vs 画面运动”。报告分「问题（通常该修）」与「风格提示（确认是否有意）」。全片 15fps 约 5–6 分钟（瓶颈是 1080p 真实渲染），优先按镜头/段落跑；采样帧有缓存，同一版本重跑很快 |
 | `craft_guide` | — | shotcraft 技法库节选（≤12k 字符）。`topic`：`shots / transitions / effects / media-styles / pipeline / platform`，省略为总览；`query` 按关键词筛小节。不需要工程服务 |
 
-**参考基准**（pdoom 参考复现片，公认的好作品；详见 ROADMAP AE-04）：画面峰约 94% 落在拍/鼓点/词起点上（中位偏移 25ms），全片下拍命中约 38%——不需要每个下拍都砸，但大变化应当在拍上；“问题”栏只报出闪烁（终段副歌字块整屏黑白橙交替，7 次/秒），死区与连续不跟拍都归为“风格提示”。画面运动等级 1–5 以参考片全片小节运动的五分位（0.014/0.021/0.033/0.049）为刻度。
+**参考基准**（pdoom 参考复现片，公认的好作品；详见 ROADMAP AE-04）：画面峰约 94% 落在拍/鼓点/词起点上（中位偏移 25ms），全片下拍命中约 38%——不需要每个下拍都砸，但大变化应当在拍上；“问题”栏只报出闪烁（终段副歌字块整屏黑白橙交替，7 次/秒），死区与连续不跟拍都归为“风格提示”。画面运动等级 1–5（rhythm-v7 起）用**相对运动** = 小节运动 ÷ 画面墨量（可见内容偏离背景的量），即“可见内容里有多大比例在变”，细线/小主体构图不会因画面稀疏被判静止；运动按 1/15 秒间隔取差，不同采样帧率等级可比。刻度为参考片全片小节相对运动五分位（0.24/0.40/0.51/0.73），3 级 = 参考片中位，参考片自身约 40% 小节低于 3 级——不要要求每个响段小节都 ≥3。报告的逐小节表仍给出绝对运动（`motion`）、墨量（`ink`）与相对值（`rel`）。
 
 **MCP resources（只读 Markdown）**：
 - `videograph://docs/mcp-guide`（本文件）
@@ -260,7 +260,7 @@ create_from_audio → director_next / project_get → song_analysis_get + cue_sh
 ### claim → 制作 receipt → complete / dispatch
 
 1. `claim` 的 owner 为≤120字符非空文本；租约默认300秒、30..900秒。同一 owner 对有效 claim 再 claim 会续租并返回原 token；另一 owner 会收到409。长任务在到期前续租，不抢占别人任务。
-2. 制作 action 的 `project_shot_update`、`project_shot_submit`、`project_transition_configure` **必须带 `attemptToken`**（非导演旧调用的 schema 仍兼容可选 token，但不产生导演 receipt，不能完成该导演任务）。每次写入还必须带目标最新 `expectedInputRevision`；token 不能代替并发校验。服务核对操作类型、目标、directorVersion、租约及基线 token；镜头 update 只写 `cursorToken`，同 token 的后续 submit 才记录源码 receipt。每次写入后重读 next，不能依赖保存的旧 actions；转场 action 的依赖包含前后镜头当前版本。
+2. 制作 action 的 `project_shot_update`、`project_shot_submit`、`project_transition_configure` **必须带 `attemptToken`**（**已有导演方案的工程，AI 不带 token 的写入一律 409 拒绝**——修复预算用尽时停下等人决定，不能走旧路径绕过；没有导演方案的旧工程不受影响，人在界面的编辑不受限）。每次写入还必须带目标最新 `expectedInputRevision`；token 不能代替并发校验。服务核对操作类型、目标、directorVersion、租约及基线 token；镜头 update 只写 `cursorToken`，同 token 的后续 submit 才记录源码 receipt。每次写入后重读 next，不能依赖保存的旧 actions；转场 action 的依赖包含前后镜头当前版本。
 3. `complete` 的制作 done 校验 receipt 与当前目标 token、源码/配置和意见响应；可 `jobIds:[]`，它只表示制作完成。源码 submit 后 next 可能只显示验证 action，使用 get/next 返回的 `resumable` 完成仍 active 的原 generate/transition action。validate/validate-transition done 需当前技术验证及匹配 kind 的已完成 job；审片/导出 action 需对应 done job；review done 需当前自评。`failed` 必须引用当前签名匹配的 error/interrupted/cancelled 真实任务，可附≤2000字符 error，不可虚构失败记录。相同 token 对已 done operation 再 complete 为幂等返回。
 4. `dispatch` 只允许 `validate / validate-transition / stills / filmstrip / rhythm / contact-sheet / export`。actionIds 为1..100个唯一ID，attemptTokens 数组同长且逐项对应；全部先 claim。已完成但尚未 complete 的同版本 job 也可复用，返回 `{projectId,jobs:[{actionId,jobId,status,reused}]}`。它不执行分析/方案/规划、源码创作或 AI 自评，也不调用第二套模型；等待 job 完成后逐项 complete。有限修复预算按目标汇总，不因 actionId 或重复 dispatch 分散计算。
 

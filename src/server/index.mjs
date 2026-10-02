@@ -293,7 +293,7 @@ const server = createServer(async (req, res) => {
       }
       if (parts[4] === 'reject-feedback' && req.method === 'POST') { const input = await body(req); json(res, rejectShotFeedback(id, parts[3], input.expectedInputRevision)); return; }
       if (parts[4] === 'accept-feedback' && req.method === 'POST') { const input = await body(req); json(res, acceptShotFeedback(id, parts[3], input.expectedInputRevision, input.feedbackIds)); return; }
-      if (parts.length === 4 && req.method === 'POST') { const input = await body(req); json(res, updateShot(id, parts[3], input.expectedInputRevision, input.patch ?? {}, input.attemptToken)); return; }
+      if (parts.length === 4 && req.method === 'POST') { const input = await body(req); json(res, updateShot(id, parts[3], input.expectedInputRevision, input.patch ?? {}, input.attemptToken, input.author ?? 'human')); return; }
     }
     if (parts[2] === 'transitions' && safeId(parts[3])) {
       const transitionId = parts[3];

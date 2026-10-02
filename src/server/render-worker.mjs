@@ -296,8 +296,8 @@ try {
       writeFileSync(`${framesFile}.tmp`, Buffer.concat(frames.map((frame) => Buffer.from(frame))));
       renameSync(`${framesFile}.tmp`, framesFile);
     }
-    const { motion, luma } = motionSeries(frames);
-    const analysis = analyzeRhythm(frozen.song, { fps: sampleFps, t: times, motion, luma }, { shots, label: input.label });
+    const { motion, luma, ink, levelMotion } = motionSeries(frames, Math.max(1, Math.round(sampleFps / 15)));
+    const analysis = analyzeRhythm(frozen.song, { fps: sampleFps, t: times, motion, luma, ink, levelMotion }, { shots, label: input.label });
     const key = sha256(`${framesKey}:${RHYTHM_VERSION}`);
     if (!existsSync(join(dir, 'artifacts', `${key}.png`))) save(key, await page.evaluate(pageDrawChart, analysis.chart));
     writeFileSync(join(dir, 'artifacts', `${key}.json`), JSON.stringify({ text: analysis.text, metrics: analysis.metrics, bars: analysis.bars }));

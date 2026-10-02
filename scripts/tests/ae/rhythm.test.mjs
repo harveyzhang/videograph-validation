@@ -156,3 +156,27 @@ test('闪烁按线性亮度：暗部明暗交替（码值 20↔70）不算闪光
   assert.equal(analyzeRhythm(song, { fps: 30, t, ...dark }).metrics.flash.risk, false);
   assert.equal(analyzeRhythm(song, { fps: 30, t, ...bright }).metrics.flash.risk, true);
 });
+
+test('相对运动：细线小主体与粗大主体做同比例运动，相对等级一致（不因构图稀疏被判静止）', () => {
+  const song = syntheticSong();
+  const make = (width) => Array.from({ length: 60 }, (_, i) => {
+    const frame = new Uint8Array(64 * 36);
+    const x0 = 10 + (i % 2) * width; // 每帧主体平移自身宽度
+    for (let y = 10; y < 26; y++) for (let x = x0; x < x0 + width; x++) frame[y * 64 + x] = 220;
+    return frame;
+  });
+  const thin = motionSeries(make(2)), bold = motionSeries(make(16));
+  assert.ok(bold.motion[5] > thin.motion[5] * 5, '绝对运动随主体面积变化');
+  const t = Array.from({ length: 60 }, (_, i) => 16 + i / 30);
+  const relOf = (s) => analyzeRhythm(song, { fps: 30, t, ...s }).bars.find((bar) => bar.rel !== null).rel;
+  assert.ok(Math.abs(relOf(thin) - relOf(bold)) / relOf(bold) < 0.35, `相对运动应接近：${relOf(thin)} vs ${relOf(bold)}`);
+});
+
+test('等级运动按 1/15 秒间隔取差：30fps 连续运动的等级运动约为相邻帧差的 2 倍', () => {
+  // 宽 8px 的亮条每帧右移 1px：相邻帧差 2 列，间隔 2 帧差 4 列。
+  const frames = Array.from({ length: 30 }, (_, i) => { const f = new Uint8Array(64 * 36); for (let y = 0; y < 36; y++) for (let x = 10 + i; x < 18 + i; x++) f[y * 64 + x] = 200; return f; });
+  const s1 = motionSeries(frames, 1), s2 = motionSeries(frames, 2);
+  assert.deepEqual(s1.levelMotion, s1.motion);
+  assert.equal(s2.levelMotion[1], null);
+  assert.ok(Math.abs(s2.levelMotion[10] / s2.motion[10] - 2) < 1e-9);
+});

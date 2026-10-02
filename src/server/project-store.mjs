@@ -162,11 +162,11 @@ function restoreSnapshot(target, snapshot) {
   }
 }
 
-export function updateShot(id, shotId, expectedInputRevision, patch, attemptToken) {
+export function updateShot(id, shotId, expectedInputRevision, patch, attemptToken, author = 'human') {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some((key) => !['title', 'prompt', 'params', 'lyricPlan', 'locked'].includes(key))) throw new ProjectError('unsupported shot patch');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
-    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken);
+    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken, author);
     const edits = Object.keys(patch).filter((key) => key !== 'locked');
     if (shot.locked && edits.length) throw new ProjectError('镜头已锁定，请先显式解锁', 409);
     if (patch.title !== undefined) {
@@ -215,7 +215,7 @@ export function submitShotSource(id, shotId, expectedInputRevision, code, summar
   if (!['mcp', 'human'].includes(author)) throw new ProjectError('invalid source author');
   return mutateProject(id, undefined, (project) => {
     const shot = shotFor(project, shotId, expectedInputRevision);
-    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken);
+    const directorOp = trackDirectorCommit(project, shot, 'shot', attemptToken, author);
     if (shot.locked) throw new ProjectError('镜头已锁定', 409);
     if (project.status && project.song?.lines) assertSceneLint(code, { lyrics: { lines: project.song.lines } });
     const responses = prepareResponses(shot, addressedFeedbackIds ?? [], feedbackResponses ?? []);
@@ -319,7 +319,7 @@ export function configureTransition(id, transitionId, expectedInputRevision, con
   if (!['human', 'mcp'].includes(author)) throw new ProjectError('invalid transition author');
   return mutateProject(id, undefined, (project) => {
     const transition = targetFor(project, transitionId, expectedInputRevision, 'transition');
-    const directorOp = trackDirectorCommit(project, transition, 'transition', attemptToken);
+    const directorOp = trackDirectorCommit(project, transition, 'transition', attemptToken, author);
     if (transition.locked) throw new ProjectError('转场已锁定，请先解锁', 409);
     const responses = prepareResponses(transition, addressedFeedbackIds ?? [], feedbackResponses ?? []);
     const checked = validateTransitionConfig(project, transition, config);

@@ -64,7 +64,7 @@ export async function callProjectTool(name: string, args: Record<string, unknown
   else if (name === 'project_plan_submit') { path += '/plan'; body = { expectedInputRevision: args.expectedInputRevision, plan: args.plan, reasoning: args.reasoning, author: 'mcp' }; }
   else if (name === 'project_shot_lyrics') path += `/shots/${shotId}/lyrics`;
   else if (name === 'project_shot_source') path += `/shots/${shotId}/source`;
-  else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch, attemptToken: args.attemptToken }; }
+  else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch, attemptToken: args.attemptToken, author: 'mcp' }; }
   else if (name === 'project_shot_submit') { path += `/shots/${shotId}/source`; body = { expectedInputRevision: args.expectedInputRevision, code: args.code, summary: args.summary, addressedFeedbackIds: args.addressedFeedbackIds, feedbackResponses: args.feedbackResponses, attemptToken: args.attemptToken, author: 'mcp' }; }
   else if (name === 'project_feedback_add') { path += `/shots/${shotId}/feedback`; body = { expectedInputRevision: args.expectedInputRevision, text: args.text, anchor: args.anchor, preserve: args.preserve, author: 'mcp' }; }
   else if (name === 'project_transition_get') path += `/transitions/${transitionId}`;
