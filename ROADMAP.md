@@ -186,7 +186,15 @@ skills/shotcraft/
 4. inbox 的 `nextStep` 中提示相关技法入口（如 aspect=motion → effects.md §节拍冲击；转场意见 → transitions.md）。
 - 测试：`scripts/tests/docs/mcp-guide-sync.test.mjs` 比对 `projectToolDefinitions` 与 MCP-GUIDE §3 的工具名，不一致即失败；resources 列表与读取；`craft_guide` 节选长度上限；skill 目录不含绝对用户路径与密钥。
 
-#### FB-04 端到端验收（QA-01 owner，独占 `scripts/tests/collaboration/`；只测，不改实现）
+#### ✅ FB-04 端到端验收（QA-01 owner，2026-10-02 完成；独占 `scripts/tests/collaboration/feedback-e2e.audit.mjs`、`helpers-fb04.mjs`；另改 `scripts/audit-all.mjs` 接线；只测，不改实现）
+
+- **交付**：`scripts/tests/collaboration/feedback-e2e.audit.mjs`（人机协作端到端）+ `helpers-fb04.mjs`（带 `__pdoom.stream` 的 1920×1080 微型导出引擎与 8 秒两镜头工程，用于导出清单/增量缓存断言）；`audit-all.mjs` 追加该审计（`SKIP_FB04_E2E=1` 可跳过）。
+- **运行**：`node scripts/tests/collaboration/feedback-e2e.audit.mjs` → **全绿，约 1 分钟**（第 17 轮定稿）。主线（真实参考工程 + 无头 Edge 人 + 真实 MCP stdio agent）：指纹导入 22 镜头/21 转场 → 人在预览播放器上定位时间锚点+保留项「歌词时序」→ 刷新仍在 → MCP inbox/stills(PNG)/ask → 人界面回复 → 外科式改写+feedbackResponses → 校验 → **只改目标镜头**（其余 21 镜头 module/inputRevision/codeHash 逐项不变）→ 导出 409 拦截 → 人拒绝（恢复参考源码、响应入 responseHistory、旧候选接受 409）→ 再改写 → 过期版本号接受 409 → 修改前版本可预览 → 并排对比（真实引擎双静帧）→ 采用 → **导出放行**（202 受理+取消验证闸门）。
+- **保留项逐像素证明**：改写前后在 3 个词起点帧（now/servant/and +0.12s）对比——改写可见（掩码内 351/1570/1927 像素变化），掩码外 **0 像素差异**（确定性引擎，卡拉OK状态逐像素未变）。
+- **微型工程完整导出**：意见闭环后导出 8s×24fps=192 帧（真实 ffmpeg x264+aac，混音用参考 BGM），`manifest.json` 记录采用后冻结版本 revision=4、audioHash=参考 BGM 指纹、两镜头新渲染分段；二次导出 2/2 分段缓存命中；歌词数据零改动。
+- **实现取舍**：参考工程 156s 全片导出对回归过重（HTTP 校验 fps 只许 24/30/60 → 3759 帧），改用「202+取消」证明放行，完整导出+清单断言落到微型工程；微型工程的人机步骤走与 UI 同一 HTTP/MCP 契约（等价性由 ui-feedback.audit 验证）。
+- **新坑（已写进夹具与记忆）**：① vite 预览服务 `fs.allow` 对系统 Temp 路径下的文件不生效——真引擎 `fetch /data/lyrics.json` 被 SPA 回退成 index.html；夹具必须放仓库 `.cache/` 下（FB-02/03 的夹具引擎不 fetch 数据文件所以没踩到）。② vite dev server 用 `localhost` 偶发绑到 ::1 导致探测全拒，必须显式 `--host 127.0.0.1`；启动失败自动换端口重试一次。③ transition-runtime 顶层 import 依赖 `gl.ts` 的 `FSPass/makeRT` 可解析，微型引擎须照抄这两个导出。④ 导出期间 publishValidation 会递增工程版本，`manifest.revision` 是入队时冻结的版本。
+- **回归**：`node --test`（96 项：95 过 0 失败 1 跳过-有意）通过；完整 `npm run audit`（project-view-audit + feedback-e2e）**全绿**；`npm run build` 失败——3 个类型错误全部位于并行会话的未提交 WIP `src/project/SongStagePanel.tsx`（SONG-02 范围，非本会话产物，不代改）；本工作包交付物均在 scripts/ 与 ROADMAP.md，不在 tsc 编译范围。
 
 1. 夹具：独立 `VIDEOGRAPH_PROJECTS` 临时目录、独立端口与令牌，从参考 BGM 建工程。
 2. 人（Playwright）在镜头 A 加带时间锚点与保留项的意见 → agent 脚本（真实 MCP stdio）：inbox → stills → 提问 → 人回复 → submit + feedbackResponses → validate → 人对比后采用 → 导出放行。
@@ -400,8 +408,9 @@ skills/shotcraft/
 本轮全量产品测试（领域测试、六项回归、工程视图、参考引擎、转场集成审计）结论为产品功能无缺陷；以下为测试中发现并登记的工具链/运维问题。均为 ⬜ 未修复；BUG-01/02 与 FB-04 同属验收脚本域，可在 FB-04 开工时一并处理（修复须按 QA-01 边界：只改测试脚本，不为让测试变绿改产品实现）。
 
 - **BUG-01** ✅ 已修复（2026-10-01，随 CLEANUP-01）：断言改为数据驱动——从镜头列表读取所选镜头真实标题再断言 inspector，不再硬编码文案。`scripts/project-view-audit.mjs` 对任意工程可用。
-- **BUG-02** ⬜ `scripts/mcp-server-test.mjs` 单独运行后 `.queue/req-mcptest-1.json`、`res-mcptest-1.json` 残留：`audit-all.mjs` 的 finally 会清理这两个固定 fixture，但直接运行该测试脚本不做清理；残留会触发 audit-all 开头的“队列已有工作”保护，挡住下次 `npm run audit`。本轮已手工删除后恢复。建议：test 脚本加 try/finally 自清理（同 audit-all 的 fixtureFiles 逻辑）。
+- **BUG-02** ✅ 已作废（2026-10-02，QA-01 核实）：`scripts/mcp-server-test.mjs` 已随 CLEANUP-01 与旧工坊一起删除，`.queue/` 目录不复存在，残留问题失去载体；等价验收已由 `scripts/tests/feedback/mcp-feedback-tools.test.mjs`（真实 stdio、自带临时目录清理）覆盖。无需修复。
 - **BUG-03** ⬜（运维提醒，低优先）工程服务（5191）无热重载，启动早于源码修改时静默运行旧代码：本轮实测服务 19:12:44 启动、27 个源文件 19:16:03 修改，测试前提失效，重启后全绿。建议任选其一：启动日志打印启动时间与提示；或 `/health` 返回 `bootTime`，审计脚本比对 `src/` 最新 mtime 并警告。
+- **BUG-04** ⬜（2026-10-02，QA-01 登记并实测）共享实例的**缓存预览服务会退化**：长驻 5191 上 spawn 的 preview vite（`previews` Map 缓存）在一段时间/兄弟审计实例启停后，其 esbuild 转换子进程死亡（`The service is no longer running: write EPIPE`），所有 `/src/*.ts` 500 → 引擎页起不来、project-view-audit 的 `#info` 走秒超时；重启 `npm run service` 立即恢复（已实测两轮）。建议：/preview 命中缓存后先探活（GET /@vite/client 或一次 main.ts transform），失败即 evict + respawn；顺带评估多个 vite 实例共享 `cacheDir=.cache/reference-vite` 的写冲突。
 
 ## 四、人工参与的正式设计
 
@@ -540,7 +549,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | SKILL-01 shotcraft 纳入仓库 | ✅ ZCode 会话认领（2026-10-01）：已写代码+已运行验证，已合并 main（分支已删除） | skills/shotcraft/、scripts/skills/、scripts/tests/docs/（已交付）；MCP resources/craft_guide/respond_to_feedback 注册提给集成者 | 内容为原创蒸馏，许可归档见 skills/shotcraft/SOURCES.md（8 无许可仓库仅思路级、StuGRua 按受限处理）；分发用 scripts/skills/install.mjs；工具速查表由 sync-platform.mjs 从 MCP-GUIDE 生成，mcp-guide-sync 测试兜底（1 项占位等集成者注册后启用） |
 | INT-00 / FB-01 | ✅ 集成者（本会话）2026-10-02 完成，已合并 main | `src/server/feedback.mjs`、`scripts/tests/feedback/` | 见第三节 |
 | FB-02 / FB-03 | ✅ ZCode 会话 2026-10-02 完成，PR #1 已于 2026-10-02 合并 main（e258508，构建通过；node --test 86 项 82 过 0 失败 4 跳过）：FB-02 独占 `src/project/FeedbackComposer.tsx`、`ReviewCompare.tsx`；FB-03 独占 `src/server/mcp-feedback-tools.ts`、`scripts/tests/feedback/mcp-feedback-tools.test.mjs`、`ui-feedback.audit.mjs`、`helpers.mjs`。热点文件的最小接线也在本分支完成（`ProjectStudio.tsx` 替换接线、`reference-server.mjs` 时间广播、`render-worker.mjs` stills 任务、`index.mjs` stills 路由、`mcp-tools.ts`/`mcp-server.ts` 工具注册、`mcp-guide-sync.test.mjs` 合并读取两个工具源文件），集成者评审时重点看这几处 | 见第三节两个 ✅ 小节的命令与结果 |
-| FB-04 端到端验收 | ⬜ 待认领（QA-01 owner）；FB-02/FB-03 已就绪，可开工 | `scripts/tests/collaboration/`；只测，不改实现 | 见第三节 |
+| FB-04 端到端验收 | ✅ ZCode 会话（QA-01 owner）2026-10-02 完成，全绿（约 1 分钟/轮） | `scripts/tests/collaboration/feedback-e2e.audit.mjs`、`helpers-fb04.mjs`（另接线 `scripts/audit-all.mjs`）；只测不改实现 | 见第三节 ✅ 小节：真实参考工程人机闭环 + 微型工程完整导出/清单/缓存断言 + 词起点帧逐像素保留项证明；BUG-02 已核实随 CLEANUP-01 作废 |
 | SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05 ✅ 集成者 2026-10-02 接线完成；SONG-06 第 1 项（click track 全链路）✅，第 2/4 项待做；SONG-03 部分完成（见第三节） | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 | CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |

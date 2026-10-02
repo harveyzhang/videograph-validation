@@ -25,3 +25,15 @@ if (!projectId) throw new Error('服务中没有任何工程；先用界面或 M
 console.log(`project-view-audit → ${projectId}`);
 const result = spawnSync(process.execPath, ['scripts/project-view-audit.mjs', projectId], { cwd: root, stdio: 'inherit', timeout: 300000 });
 if (result.status !== 0) { console.error(`FAILED: project-view-audit exit ${result.status}`); process.exitCode = 1; }
+
+// FB-04 人机协作端到端：独立实例 + 真实 MCP stdio + 参考工程导入 + 真引擎渲染（约 10–25 分钟，GPU）。
+// SKIP_FB04_E2E=1 可跳过（只想快速回归工程视图时）；导出以 fps=4 低速完整成片。
+if (process.env.SKIP_FB04_E2E === '1') {
+  console.log('SKIP_FB04_E2E=1 → 跳过 feedback-e2e.audit');
+} else if (process.exitCode) {
+  console.log('前序审计失败 → 跳过 feedback-e2e.audit');
+} else {
+  console.log('feedback-e2e.audit → FB-04 人机协作端到端（独立实例）');
+  const e2e = spawnSync(process.execPath, ['scripts/tests/collaboration/feedback-e2e.audit.mjs'], { cwd: root, stdio: 'inherit', timeout: 2100000 });
+  if (e2e.status !== 0) { console.error(`FAILED: feedback-e2e exit ${e2e.status}`); process.exitCode = 1; }
+}
