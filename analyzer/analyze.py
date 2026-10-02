@@ -112,7 +112,10 @@ def stage_t3(spec, out_dir):
             raise RuntimeError("LRC 里没有可解析的时间戳行")
     segments = analysis_segments(spec, t0, out_dir)
     if text_lines:
-        aligned = align_lines_segmented(segments, [line["text"] for line in text_lines], language, spec)
+        if language in ("zh", "yue", "en"):
+            aligned = align_lines_segmented(segments, [line["text"] for line in text_lines], language, spec)
+        else:
+            aligned = align_lines_sliding(t0["wav"], t0["duration"], [line["text"] for line in text_lines], language, spec)
         lines = []
         for index, line in enumerate(text_lines):
             line_words = aligned[index] if index < len(aligned) else []
@@ -235,9 +238,96 @@ def _token_count(text):
     return len(text.split())
 
 
+LINE_WINDOW = 12.0
+
+
+def align_lines_sliding(wav, duration, texts, language, spec):
+    """逐行锚点验证对齐： ForcedAligner 特征窗 30s，实测 ≥27s 大段在部分语言（日语实测）
+    上塌缩（全零时间戳），且文本不在窗口内时会把词锚到窗口端点（假对齐、conf 不可用）。
+    协议：候选锚点 = 人声带攻击点（HPSS melodic 起点，实测数据）+ 先验位置采样；
+    对每个候选把该行文本对齐到 [锚-1.2, 锚+LINE_WINDOW] 窗口，只有当返回行跨度
+    贴住锚点（±0.45s）、时长与字数相称且相对上一行单调时才接受（可证伪的一致性检查，
+    假对齐会被端点偏置暴露）。全部候选失败 → 行界按邻居内插、词按字数比例摊（conf 0.3
+    的 draft，待人校正），不伪造精度。"""
+    aligner = _load_qwen_aligner(spec)
+    lang_name = LANGUAGE_NAMES.get(language, language)
+    import librosa
+    import numpy as np
+    import soundfile as sf
+    y, sr = librosa.load(wav, sr=16000, mono=True)
+    # 人声带攻击点（与 percussion_onsets 同源的 melodic 证据，只是这里按行锚候选复用）
+    sys.path.insert(0, str(Path(__file__).parent))
+    import analysis_lib as lib
+    vocal_hits = [t for t, s in lib.percussion_onsets(y, sr)["vocal"] if s > 0.15]
+
+    def expected_dur(text):
+        return min(6.5, max(0.9, 0.145 * len(text.replace(" ", ""))))
+
+    def try_candidate(index, cand, prev_start):
+        w0 = max(0.0, cand - 1.2)
+        w1 = min(duration, cand + LINE_WINDOW)
+        if w1 - w0 < 2.5:
+            return None
+        path = Path(wav).parent / f"t3-line-{index}.wav"
+        sf.write(path, y[int(w0 * sr):int(w1 * sr)], sr)
+        try:
+            output = aligner.align(path, text=texts[index], language=lang_name)
+            items = _result_items(output[0] if isinstance(output, list) else output)
+            tokens = []
+            for item in items:
+                piece = str(getattr(item, "text", "") or "").strip()
+                st = w0 + float(getattr(item, "start_time", 0.0))
+                en = w0 + float(getattr(item, "end_time", 0.0))
+                if piece:
+                    tokens.append({"w": piece, "start": st, "end": max(en, st), "conf": 0.8})
+        except Exception:
+            tokens = []
+        finally:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if not tokens:
+            return None
+        s0, s1 = tokens[0]["start"], tokens[-1]["end"]
+        span = s1 - s0
+        exp = expected_dur(texts[index])
+        if abs(s0 - cand) > 0.45:            # 行起点必须贴住候选锚（端点偏置的假对齐过不了）
+            return None
+        if span < 0.45 * exp or span > 2.5 * exp + 0.8:  # 时长与字数相称
+            return None
+        if prev_start is not None and s0 < prev_start + 0.25:  # 行序单调
+            return None
+        return tokens
+
+    results = []
+    prev_start = None
+    prior = 0.0
+    prior_step = 5.5
+    for index, text in enumerate(texts):
+        cands = [t for t in vocal_hits if prior - 1.5 <= t <= prior + 9.0]
+        cands = sorted(set(cands))[:6]
+        if not cands or (not cands or cands[0] > prior + 2.0):
+            cands = [prior] + cands
+        got = None
+        for cand in cands:
+            got = try_candidate(index, cand, prev_start)
+            if got:
+                break
+        if got:
+            results.append(got)
+            prev_start = got[0]["start"]
+            prior = got[-1]["end"] + 0.15
+        else:
+            results.append([])  # 空词：由 stage_t3 按邻居内插兜底并标 draft
+            prior += prior_step
+    return results
+
+
 def align_lines_segmented(segments, texts, language, spec):
     """用户文本路径：把行按时长比例分配到各段，段内整段对齐（30s 段实测 40ms 达标）。
-    行归属是比例近似（段内精确）；段边界行的误差由 SONG-02 人工校正兜底。"""
+    行归属是比例近似（段内精确）；段边界行的误差由 SONG-02 人工校正兜底。
+    （日语等语言在大段上会拿到全零时间戳 conf=-1，这类语言由 stage_t3 分流到逐行滑窗。）"""
     aligner = _load_qwen_aligner(spec)
     lang_name = LANGUAGE_NAMES.get(language, language)
     total = sum(seg["end"] - seg["start"] for seg in segments)

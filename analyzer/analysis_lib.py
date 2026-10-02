@@ -141,7 +141,19 @@ def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):
         return [], [], tempo_value, "librosa.beat_track", 0.3
     best_score = max(score for _, score, _ in scored)
     qualified = [entry for entry in scored if entry[1] >= max(0.7 * best_score, 0.4)]
-    bpm_value, score, beats = max(qualified, key=lambda entry: entry[0])
+    if qualified:
+        bpm_value, score, beats = max(qualified, key=lambda entry: entry[0])
+        method, confidence = "librosa.beat_track+phase+octave", 0.5
+    else:
+        # 倍半评分不可信（最优网格也够不到绝对门槛）：librosa 的 tempo 先验在八度/附点上
+        # 会选错（实测同一首歌 22.05k=161 / 44.1k=110），改用常速网格直搜；
+        # 起始点太少搜不出网格才退回 librosa 原速网格。provenance 如实记录方法与置信度。
+        grid = _onset_grid_beats(y, sr, onsets)
+        if grid is not None:
+            beats, method, confidence = grid, "onset-grid(constant-tempo)", 0.45
+        else:
+            beats = next((entry[2] for entry in scored if abs(entry[0] - tempo_value) < 1e-6), scored[0][2])
+            method, confidence = "librosa.beat_track(no-octave,weak-percussion)", 0.3
     strength_at = lambda t: max((s for events in onsets.values() for other, s in events if abs(other - t) < 0.05), default=0.0)
     best_offset, best_score = 0, -1.0
     for offset in range(meter):
@@ -151,7 +163,69 @@ def estimate_beats(y, sr=SR, meter=4, audio_path=None, device=None):
     downbeats = [float(t) for i, t in enumerate(beats) if (i - best_offset) % meter == 0]
     # BPM 取拍位置的线性拟合斜率：网格局部有抖动，长程速率才是真实 BPM
     fit_bpm = 60.0 / float(np.polyfit(np.arange(len(beats)), np.asarray(beats), 1)[0])
-    return beats.tolist(), downbeats, fit_bpm, "librosa.beat_track+phase+octave", 0.5
+    return beats.tolist(), downbeats, fit_bpm, method, confidence
+
+
+def _onset_grid_beats(y, sr, onsets):
+    """常速拍网格直搜：谱通量起始包络自相关取拍级周期锚（0.30–0.67s），±10% 扫描，
+    每周期 24 相位等步搜索；得分 = 网格点 ±60ms 内 kick/snare 命中强度均值
+    （一维膨胀 max 向量化）。感知速度带（0.333–0.667s）内 ≥70% 全局最优分的候选优先
+    （八度/附点歧义按惯例向人耳 tempo 收敛）；选中后近邻吸附一轮 + 线性拟合细化周期
+    （DAW 常速曲目拍距恒定）。返回 (beats, method, confidence)；证据不足返回 None。"""
+    import librosa
+    from scipy.ndimage import maximum_filter1d
+    strong = sorted([(t, s) for key in ("kick", "snare") for t, s in onsets[key]])
+    if len(strong) < 16:
+        return None
+    times = np.asarray([t for t, _ in strong], dtype=float)
+    res = 0.01
+    bins = np.zeros(int(times.max() / res) + 2)
+    np.add.at(bins, (times / res).astype(int), np.asarray([s for _, s in strong], dtype=float))
+    dilated = maximum_filter1d(bins, size=13, mode="constant")  # ±60ms 窗口内最大命中强度
+
+    env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
+    env = env - float(env.mean())
+    autocorr = np.correlate(env, env, "full")[len(env) - 1:]
+    autocorr /= max(float(autocorr[0]), 1e-9)
+    env_fps = sr / 512.0
+    lo, hi = int(0.30 * env_fps), int(0.67 * env_fps) + 1
+    if hi - lo < 8 or hi >= len(autocorr):
+        return None
+    anchor = float(np.argmax(autocorr[lo:hi]) + lo) / env_fps
+    periods = [anchor * (1.0 + k * 0.002) for k in range(-50, 51)]  # ±10% 步长 0.2%
+    best = best_band = None  # (score, period, phase)
+    for period in periods:
+        for phase in np.arange(0.0, period, period / 24.0):
+            grid = np.arange(phase, bins.size * res, period)
+            idx = (grid / res).astype(int)
+            if idx.size == 0:
+                continue
+            score = float(dilated[idx].mean())
+            if best is None or score > best[0]:
+                best = (score, period, float(phase))
+            if 0.333 <= period <= 0.667 and (best_band is None or score > best_band[0]):
+                best_band = (score, period, float(phase))
+    if best is None:
+        return None
+    score, period, phase = best_band if best_band is not None and best_band[0] >= 0.7 * best[0] else best
+    beats = np.arange(phase, bins.size * res, period)
+    pos = np.searchsorted(times, beats)
+    snapped = []
+    for i, beat in enumerate(beats):
+        window = times[max(pos[i] - 3, 0):min(pos[i] + 4, len(times))]
+        nearest = window[np.argmin(np.abs(window - beat))] if window.size else beat
+        snapped.append(nearest if abs(nearest - beat) <= 0.08 else beat)
+    snapped = np.asarray(snapped)
+    if len(snapped) >= 8:
+        slope = float(np.polyfit(np.arange(len(snapped)), snapped, 1)[0])
+        if 0.5 * period <= slope <= 2.0 * period:
+            period = slope
+            beats = phase + np.arange(len(snapped)) * period
+        else:
+            beats = snapped
+    if len(beats) < 8:
+        return None
+    return beats
 
 
 def _beats_via_beat_this(audio_path, device):

@@ -11,8 +11,9 @@ const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 export const ANALYZER_VERSION = 'song01-v1';
 export const analyzerPython = () => process.env.VIDEOGRAPH_ANALYZER_PYTHON ?? 'D:/Users/Martis/anaconda3/envs/videograph-analyzer/python.exe';
-/** T3（qwen-asr）需要 py3.12；缺省回退到主解释器（见 analyzer/environment.md 双环境说明）。 */
-export const analyzerT3Python = () => process.env.VIDEOGRAPH_ANALYZER_T3_PYTHON ?? analyzerPython();
+/** T3（qwen-asr）需要 py3.12：机器上存在 videograph-t3 环境时优先用它，否则回退主解释器（analyzer/environment.md 双环境说明）。 */
+const T3_PYTHON_DEFAULT = 'D:/Users/Martis/anaconda3/envs/videograph-t3/python.exe';
+export const analyzerT3Python = () => process.env.VIDEOGRAPH_ANALYZER_T3_PYTHON ?? (existsSync(T3_PYTHON_DEFAULT) ? T3_PYTHON_DEFAULT : analyzerPython());
 export const analysisCacheRoot = () => resolve(process.env.VIDEOGRAPH_SONG_CACHE ?? join(productRoot, '.cache', 'song-analysis'));
 
 /** 缓存键（规范化输入 + 版本）：改分析参数或分析器版本即失效。 */
@@ -25,11 +26,25 @@ export function analysisCacheKey(audioHash, stages, params, version = ANALYZER_V
 export async function runAnalysis({ audioPath, stages = ['t0', 't1', 't3'], lyricsText, lrcPath, asr, language, gpu = true, title, cacheRoot = analysisCacheRoot(), python = analyzerPython(), t3Python = analyzerT3Python(), analyzerScript = join(productRoot, 'analyzer', 'analyze.py'), onProgress } = {}) {
   if (!audioPath || !existsSync(audioPath)) throw new Error('音频不存在');
   if (!existsSync(python)) throw new Error(`分析器解释器不存在：${python}；见 analyzer/environment.md`);
-  const needsT3 = Boolean(lyricsText || lrcPath || asr);
+  const needsT3 = stages.includes('t3') && Boolean(lyricsText || lrcPath || asr);
   if (needsT3 && !existsSync(t3Python)) throw new Error(`T3 解释器不存在：${t3Python}；见 analyzer/environment.md`);
+  // analyze.py 按固定顺序执行阶段；缓存用去重后的实际阶段（含自动 assemble），而非请求列表。
+  const baseStages = ['t0', 't1', 't3', 'assemble'].filter((stage) => stages.includes(stage) && (stage !== 't3' || needsT3));
+  if (baseStages.includes('t1') && !baseStages.includes('assemble')) baseStages.push('assemble');
+  const splitT3 = needsT3 && resolve(t3Python) !== resolve(python);
+  if (splitT3 && !baseStages.includes('t0')) baseStages.unshift('t0');
+  if (splitT3 && !baseStages.includes('assemble')) baseStages.push('assemble');
   const audioHash = sha256(readFileSync(audioPath));
-  const params = { language: language ?? null, gpu, hasLyrics: Boolean(lyricsText || lrcPath) };
-  const key = analysisCacheKey(audioHash, stages, params);
+  const params = {
+    language: language ?? null, gpu, title: title ?? null, asr: asr ?? null,
+    lyricsHash: lyricsText == null ? null : sha256(lyricsText),
+    lrcHash: lrcPath ? sha256(readFileSync(lrcPath)) : null,
+  };
+  // 入口与本地算法库都纳入版本，源码变更不能复用旧分析（含未提交的分析器修改）。
+  const library = join(dirname(analyzerScript), 'analysis_lib.py');
+  const sourceVersion = sha256(JSON.stringify({ version: ANALYZER_VERSION,
+    entrypoint: sha256(readFileSync(analyzerScript)), library: existsSync(library) ? sha256(readFileSync(library)) : null }));
+  const key = analysisCacheKey(audioHash, baseStages, params, sourceVersion);
   const cached = join(cacheRoot, `${key}.json`);
   if (existsSync(cached)) return { cached: true, key, analysis: JSON.parse(readFileSync(cached, 'utf8')), file: cached };
   const work = mkdtempSync(join(tmpdir(), 'videograph-song-'));
@@ -42,13 +57,12 @@ export async function runAnalysis({ audioPath, stages = ['t0', 't1', 't3'], lyri
       output.push(...lines);
       return lines;
     };
-    const baseStages = stages.filter((stage) => stage !== 't3' || needsT3);
-    if (needsT3 && resolve(t3Python) !== resolve(python)) {
-      await runWith(t3Python, ['t0', ...(baseStages.includes('t3') ? ['t3'] : [])]);
+    if (splitT3) {
+      await runWith(t3Python, ['t0', 't3']);
       if (baseStages.includes('t1')) await runWith(python, ['t1']);
       await runWith(python, ['assemble']);
     } else {
-      await runWith(python, [...baseStages, ...(baseStages.includes('t1') ? ['assemble'] : [])]);
+      await runWith(python, baseStages);
     }
     const finalLine = [...output].reverse().find((line) => line.stage === 'all');
     if (!finalLine) throw new Error('分析器没有产出最终结果（缺少 assemble 输出）');
