@@ -8,6 +8,7 @@ import { referenceShots } from './reference-plan.mjs';
 import { ProjectError } from './errors.mjs';
 import { prepareLyricPlan, shotLyricContext } from './lyric-elements.mjs';
 import { normalizeProject, transitionPair, transitionConfig, validateTransitionConfig, transitionWindow } from './transitions.mjs';
+import { createSongProject } from './song-project.mjs';
 import { prepareFeedbackInput, createNote, invalidateResponses, prepareResponses, applyResponses, askOnNote, replyOnNote, inboxItems, feedbackTargetWindow, lyricElementIds } from './feedback.mjs';
 export { ProjectError } from './errors.mjs';
 
@@ -33,7 +34,7 @@ export function readProject(id) {
 export function listProjects() {
   if (!existsSync(projectsRoot)) return [];
   return readdirSync(projectsRoot).filter((id) => safeId(id) && existsSync(join(projectsRoot, id, 'project.sqlite')))
-    .map((id) => { const p = readProject(id); return { id, name: p.name, revision: p.revision, createdAt: p.createdAt, shots: p.shots.length, duration: p.song.duration }; })
+    .map((id) => { const p = readProject(id); return { id, name: p.name, revision: p.revision, createdAt: p.createdAt, shots: p.shots.length, duration: p.song?.duration ?? null, status: p.status ?? 'normal' }; })
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 export function mutateProject(id, expectedRevision, mutate) {
@@ -61,15 +62,25 @@ function hashTree(dir, prefix = '') {
   });
 }
 
-/** 本阶段对该 BGM 使用内容指纹命中的已对齐分析；不会把它说成重新跑过语音识别。 */
-export function createProjectFromAudio(audioPath, name) {
+/** 参考 BGM 指纹命中 → 复用已对齐分析（不说成重新识别）；其他音频 → 新歌工程，排队分析（song-project.mjs）。 */
+export function createProjectFromAudio(audioPath, name, opts = {}) {
   if (typeof audioPath !== 'string' || !['.mp3', '.wav', '.m4a', '.ogg', '.flac'].includes(extname(audioPath).toLowerCase())) throw new ProjectError('需要本地音频文件路径');
   const path = resolve(audioPath);
   if (!existsSync(path) || !statSync(path).isFile() || statSync(path).size > 300 * 1024 * 1024) throw new ProjectError('音频不存在或超过 300 MB');
   const audio = readFileSync(path);
   const audioHash = sha256(audio);
   const knownHash = sha256(readFileSync(join(referenceRoot, 'audio/pdoom.mp3')));
-  if (audioHash !== knownHash) throw new ProjectError('该音频尚未匹配可复现的分析/引擎配方。本阶段仅支持 pdoom-video 的原始 BGM；不能用它的歌词时间轴套用其他歌曲。', 422);
+  const isReference = audioHash === knownHash;
+
+  // SONG-05: 指纹命中 → 参考导入流程；否则 → 空工程 + analysis-pending
+  if (isReference) {
+    return createReferenceProject(audioPath, path, audio, audioHash, name);
+  } else {
+    return createSongProject(path, audio, audioHash, name, opts);
+  }
+}
+
+function createReferenceProject(audioPath, path, audio, audioHash, name) {
   const id = randomUUID();
   const dir = join(projectsRoot, id);
   mkdirSync(dir, { recursive: true });
@@ -187,9 +198,12 @@ export function updateShot(id, shotId, expectedInputRevision, patch) {
 export function readShotSource(id, shotId) {
   const project = readProject(id);
   const shot = project.shots.find((entry) => entry.id === shotId);
-  if (!shot || !safeId(shot.module)) throw new ProjectError('shot not found', 404);
+  if (!shot) throw new ProjectError('shot not found', 404);
   const engine = join(projectDir(id), 'engine');
-  return { shot, code: readFileSync(join(engine, `app/src/scenes/${shot.module}.ts`), 'utf8'),
+  // 新歌工程的未生成镜头没有源码：返回通用窗口模板作为起点（标记 template，不算该镜头的版本）。
+  const template = shot.module === null && existsSync(join(engine, 'app/src/scenes/_window-template.ts'));
+  if (!template && !safeId(shot.module)) throw new ProjectError('shot not found', 404);
+  return { shot, ...(template ? { template: true } : {}), code: readFileSync(join(engine, `app/src/scenes/${template ? '_window-template' : shot.module}.ts`), 'utf8'),
     contract: readFileSync(join(engine, 'docs/ENGINE.md'), 'utf8'), lyricContext: shotLyricContext(project, shot), source: shot.source };
 }
 export function submitShotSource(id, shotId, expectedInputRevision, code, summary = '', addressedFeedbackIds = [], author = 'mcp', feedbackResponses = []) {

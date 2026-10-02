@@ -49,8 +49,13 @@ projects/<uuid>/
 | 工具 | 参数 | 作用 |
 |---|---|---|
 | `project_list` | — | 本地工程列表 |
-| `project_create_from_bgm` | `audioPath` | **当前只支持 pdoom-video 原始 BGM**（字节指纹匹配，复用已对齐分析，标记为参考导入）；其他音频返回 422。任意歌曲见 §… |
+| `project_create_from_audio` | `audioPath` | 任意本地音频建工程，可选 `name / lyricsText / lrcPath / language / stages`（`t0/t1/t… |
+| `project_create_from_bgm` | `audioPath` | `project_create_from_audio` 的别名（保留兼容） |
 | `project_get` | `projectId` | 完整工程：镜头、转场、意见、版本、输出规格。默认只返回歌曲摘要，`includeAnalysis: true` 返回完整词级歌词/节拍/包络 |
+| `song_analysis_get` | `projectId` | 读取 `videograph-analysis/v2` 分析与 `provenance`、当前 `inputRevision`。默认层 `au… |
+| `song_lyrics_submit` | `projectId, expectedInputRevision, lyrics` | 整层替换歌词：`{ lines: [{ text, start, end, words: [{ w, start, end }] }], la… |
+| `song_analysis_confirm` | `projectId` | 确认分析，`analysis-draft → analysis-confirmed`。agent 可调用，记为 `confirmedBy: m… |
+| `project_plan_submit` | `projectId, expectedInputRevision` | 仅 `analysis-confirmed` 可用。`plan: [{ lineText | sectionIndex | t, title?… |
 | `project_shot_lyrics` | `projectId, shotId` | 镜头窗口内词级歌词、`instrumental` 标记、已有 `lyricPlan` |
 | `project_shot_source` | `projectId, shotId` | `{ shot, code, contract, lyricContext, source }`：当前真实 TS 源码与完整引擎契约（ENGI… |
 | `project_shot_update` | `projectId, shotId, expectedInputRevision, patch` | patch 仅允许 `title / prompt / params / lyricPlan / locked`。改 `prompt` 或 `… |

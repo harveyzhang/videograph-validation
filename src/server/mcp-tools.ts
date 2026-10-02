@@ -13,7 +13,12 @@ const anchorSchema = { type: 'object', description: '定位锚点：t/range 落�
 const preserveSchema = { type: 'array', items: { type: 'string' }, description: '必须保留的内容（≤12 条，每条 ≤300 字）' };
 export const projectToolDefinitions = withFeedbackResponsesSchema([
   { name: 'project_list', description: '列出本地可恢复的视频工程。', inputSchema: schema({}, []) },
-  { name: 'project_create_from_bgm', description: '只提供本地 BGM 路径创建独立可复现工程。目前仅指纹匹配 pdoom-video 原始 BGM：复用已对齐分析与引擎源码，明确标记参考导入，不冒充新分析或原创生成。', inputSchema: schema({ audioPath: { type: 'string' }, name: { type: 'string' } }, ['audioPath']) },
+  { name: 'project_create_from_audio', description: '从本地音频创建工程。指纹匹配 pdoom-video 原 BGM 时为参考导入；否则新建歌曲工程（status=analysis-pending），后台自动分析节拍/段落（t1），提供 lyricsText/lrcPath 时对齐歌词（t3）。轮询 project_get 直到 status=analysis-draft（失败为 analysis-failed）。', inputSchema: schema({ audioPath: { type: 'string' }, name: { type: 'string' }, lyricsText: { type: 'string', description: '歌词原文（可选，提供后做词级对齐）' }, lrcPath: { type: 'string' }, language: { type: 'string', description: '语言代码，如 zh / en' }, stages: { type: 'array', items: { type: 'string', enum: ['t0', 't1', 't3'] } } }, ['audioPath']) },
+  { name: 'project_create_from_bgm', description: 'project_create_from_audio 的别名（保留兼容）。', inputSchema: schema({ audioPath: { type: 'string' }, name: { type: 'string' } }, ['audioPath']) },
+  { name: 'song_analysis_get', description: '读取新歌工程的分析（videograph-analysis/v2）。默认层 audio/rhythm/sections/lyrics；envelopes/onsets 需在 layers 中显式请求。可按 startTime/endTime（秒）过滤。返回 inputRevision 供后续写操作。', inputSchema: schema({ startTime: { type: 'number' }, endTime: { type: 'number' }, layers: { type: 'array', items: { type: 'string', enum: ['audio', 'rhythm', 'sections', 'lyrics', 'envelopes', 'onsets'] } } }, ['projectId']) },
+  { name: 'song_lyrics_submit', description: '整层替换歌词（v2 结构：{ lines: [{ text, start, end, words: [{ w, start, end }] }] }，时间单位秒），用于修正误听/补词。经契约校验后工程回到 analysis-draft，需再次 song_analysis_confirm。', inputSchema: schema({ lyrics: { type: 'object' } }, ['projectId', 'expectedInputRevision', 'lyrics']) },
+  { name: 'song_analysis_confirm', description: '确认分析：analysis-draft → analysis-confirmed，之后才能规划镜头。agent 可调用（记为 confirmedBy: mcp）；调用前先用 song_analysis_get 核对节拍/歌词/段落，明显误听先用 song_lyrics_submit 修正。', inputSchema: schema({}, ['projectId']) },
+  { name: 'project_plan_submit', description: '仅 analysis-confirmed 可用。plan: [{ lineText | sectionIndex | t, title?, prompt?, id? }]，每项是一刀的锚点，服务端吸附到拍点且不切词，覆盖全曲；省略 plan 则用确定性兜底（每段一镜，标注非 AI 创作）。成功后工程 → planned，镜头 → needs-generation（project_shot_source 返回通用模板作为起点）。', inputSchema: schema({ plan: { type: 'array', items: { type: 'object' } }, reasoning: { type: 'string' } }, ['projectId', 'expectedInputRevision']) },
   { name: 'project_get', description: '读取工程、镜头版本与状态、BGM 分析来源；可选返回歌词/节拍分析。', inputSchema: schema({ includeAnalysis: { type: 'boolean' } }, ['projectId']) },
   { name: 'project_shot_lyrics', description: '读取目标镜头窗口内真实词级歌词与已有元素方案。先从歌词分析含义和具象/动作/隐喻元素，再用 project_shot_update 的 lyricPlan 保存引用、解释、视觉处理；引用会被校验。', inputSchema: schema({}, ['projectId', 'shotId']) },
   { name: 'project_shot_source', description: '读取某镜头当前真实 TypeScript 源码及完整原引擎契约（Scene 类、Three.js/GLSL/字体/后期）。修改时保留输入版本并通过 project_shot_submit 提交完整文件。', inputSchema: schema({}, ['projectId', 'shotId']) },
@@ -42,7 +47,17 @@ export async function callProjectTool(name: string, args: Record<string, unknown
   let path = `/projects/${id}`;
   let body: unknown;
   if (name === 'project_list') path = '/projects';
-  else if (name === 'project_create_from_bgm') { path = '/projects'; body = { audioPath: args.audioPath, name: args.name }; }
+  else if (name === 'project_create_from_bgm' || name === 'project_create_from_audio') { path = '/projects'; body = { audioPath: args.audioPath, name: args.name, lyricsText: args.lyricsText, lrcPath: args.lrcPath, language: args.language, stages: args.stages }; }
+  else if (name === 'song_analysis_get') {
+    const query = new URLSearchParams();
+    if (args.startTime !== undefined) query.set('startTime', String(args.startTime));
+    if (args.endTime !== undefined) query.set('endTime', String(args.endTime));
+    if (Array.isArray(args.layers) && args.layers.length) query.set('layers', args.layers.join(','));
+    path += `/song/analysis${query.size ? '?' + query : ''}`;
+  }
+  else if (name === 'song_analysis_confirm') { path += '/song/analysis/confirm'; body = { author: 'mcp' }; }
+  else if (name === 'song_lyrics_submit') { path += '/song/lyrics'; body = { expectedInputRevision: args.expectedInputRevision, lyrics: args.lyrics, author: 'mcp' }; }
+  else if (name === 'project_plan_submit') { path += '/plan'; body = { expectedInputRevision: args.expectedInputRevision, plan: args.plan, reasoning: args.reasoning, author: 'mcp' }; }
   else if (name === 'project_shot_lyrics') path += `/shots/${shotId}/lyrics`;
   else if (name === 'project_shot_source') path += `/shots/${shotId}/source`;
   else if (name === 'project_shot_update') { path += `/shots/${shotId}`; body = { expectedInputRevision: args.expectedInputRevision, patch: args.patch }; }

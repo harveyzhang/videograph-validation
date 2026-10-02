@@ -313,6 +313,8 @@ skills/shotcraft/
 
 #### SONG-03 引擎解耦（`reference-server.mjs`、`render-worker.mjs` 属于集成者；场景模板和字体放 `engine-base/`）
 
+> **🚧 2026-10-02 集成者（本会话）部分完成**：第 1 条（`audio.engineFile`，预览/导出/混音均读该字段；参考工程缺省 `audio/pdoom.mp3`，缓存键不变）、第 2 条（新歌工程 `timeline.ts` 为空表，时间线完全来自工程镜头；未生成镜头回落到通用模板）、第 3 条前三项（复制引擎核心 + 通用场景，排除 24 个绑定原曲的场景文件；`_window-template.ts` 已按真实 Scene API 重写——原版用了引擎不存在的 `begin2D/f.window/word.progress`，无法编译）、第 5 条（新歌工程写独立 CREDITS）。**未做**：第 3 条的提交时 scene-lint 接线、第 4 条中文字体子集化（中文歌词目前会落到浏览器回退字体）、新歌工程仍会构造 P(DOOM) HUD（模板以 `hud: 0` 关闭）。
+
 1. 音频路径参数化：工程记录 `audio.file`（`engine/audio/<hash>.<ext>`），预览播放器和 ffmpeg 混音都读这个字段，不再写死 `pdoom.mp3`。
 2. 时间线完全由工程镜头列表生成：不依赖参考 `timeline.ts` 里的条目，每个镜头直接映射到 `module/params/post`。参考工程的行为保持不变，现有导出缓存键要么不变，要么显式升版本。
 3. 场景分级：
@@ -333,7 +335,11 @@ skills/shotcraft/
 3. 产出的镜头状态为 `needs-generation`，来源 `ai-original`，带 `lyricPlan` 草稿。之后沿用现有“读上下文 → submit → validate”流程。转场节点按相邻镜头自动生成。
 4. 内置的确定性规划只用于测试和兜底（每段一个镜头），并明确标注不是 AI 创作。
 
-#### SONG-05 建工程与 MCP 接入（服务路由和 MCP 注册由集成者合并；同步更新 `docs/MCP-GUIDE.md`）
+#### ✅ SONG-05 建工程与 MCP 接入（2026-10-02 集成者完成，已运行验证；服务路由和 MCP 注册由集成者合并；同步更新 `docs/MCP-GUIDE.md`）
+
+> 交付：`src/server/song-project.mjs`（新建：建工程/通用引擎快照、分析落盘与契约校验、确认、歌词修正、规划）、`src/server/analysis-jobs.mjs`（后台分析，失败转 `analysis-failed`，可经 HTTP `POST .../song/analysis/retry` 重试）；`project-store.mjs`/`index.mjs`/`reference-server.mjs`/`render-worker.mjs`/`mcp-tools.ts` 接线；服务 apiVersion `project-service/v4-song`。
+> 实现取舍：MCP 工具为 `project_create_from_audio`（`_from_bgm` 为别名）、`song_analysis_get`、`song_lyrics_submit`、`song_analysis_confirm`、`project_plan_submit`；`song_analysis_run/patch` 未做（留在 MCP-GUIDE §6）。v2 分析存于工程目录 `analysis/analysis-v2.json`，工程快照只存 `toFullSong` 派生数据；歌词原文不进快照/MCP 输出。规划复用 SONG-04 `validatePlan`（锚点推导切点），省略 plan 时用 `planFromSections` 兜底并标注非 AI。新歌工程在 `planned` 前拒绝 validate/stills/render；导出拒绝无源码镜头。修复草稿中的问题：分析器被当 CLI 调用、`listProjects` 遇无 song 工程崩溃、分析任务重启后被塞进渲染队列、拍点过滤按对象字段写错、`song_analysis_get` 用 POST 发出。
+> 验证：`node --test "scripts/tests/**/*.test.mjs" scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs` 96 项 95 过 0 失败 1 跳过（新增 `scripts/tests/song/song-project.test.mjs` 10 项）；`npm run build` 通过；端到端见 SONG-06 记录。
 
 1. `createProjectFromAudio` 改为：
    - 指纹命中参考曲 → 现有导入流程（保留）。
@@ -346,7 +352,7 @@ skills/shotcraft/
    - `song_lyrics_submit`：agent 可以提交歌词文本草稿，状态仍是“待人确认”。
    - `song_analysis_patch`：agent 的修正标为 mcp 来源。
    - `project_plan_submit`。
-   - **不提供** AI 确认分析的工具。
+   - `song_analysis_confirm`：确认分析。**2026-10-02 用户决定允许 AI 确认**（原计划为仅人工确认）；MCP 调用记为 `confirmedBy: mcp`，界面/HTTP 默认 `human`，人仍可复核。
 4. 用户素材只留在本机，MCP 输出不包含音频字节和本机绝对路径。
 
 #### SONG-06 验收（QA owner；只测，不改实现）
@@ -359,6 +365,15 @@ skills/shotcraft/
    - 记录人工校正花了多久、改了多少处；
    - 审美由人确认。
 5. 未知音频且没有提供歌词时，不出现任何旧工程的歌词；歌词校验门拒绝引用不存在的句子。
+
+#### SONG-06 第 1 项验收记录（2026-10-02，集成者，合成 click track）
+
+- 命令：`node --experimental-strip-types --no-warnings scripts/song-e2e-audit.mjs`（音频 `.cache/e2e-song/click132.wav`：132 BPM、12 小节、21.82s，由 `analyzer/clicktrack_test.make_click_track` 生成，不入库）。脚本起独立服务（端口 5291、独立工程目录与令牌），**全程走 MCP 工具函数**。
+- 结果 ✅：建工程 → T1 分析 6s（bpm 132.01、49 拍 / 13 下拍、1 段，无歌词层）→ agent `song_analysis_confirm`（`confirmedBy: mcp`）→ 锚点规划 3 镜（0–7.267 / 7.267–14.567 / 14.567–21.818）→ 每镜模板改写提交 + validate 通过 → 导出 h264 655 帧 @30（= 曲长 × 30）+ AAC，ffprobe 逐帧计数一致 → 导出音轨与源音频零偏移相关系数 **0.999111**（≥0.999）→ 二次导出缓存命中 **3/3**。
+- 拒绝路径：分析未确认时规划 409；镜头未生成时导出 409；无歌词音频不出现任何歌词。
+- 抽帧人工查看（9.0s）：镜头 2 青色节拍框 + 拍号计数，真实引擎渲染，无 P(DOOM) HUD。
+- 第 2 项回归：新增单测确认 pdoom 原 BGM 仍走指纹导入（22 镜头、无新歌状态、音频缺省 pdoom.mp3）；未在本轮跑浏览器级 `npm run audit:reference`。
+- 尚未做：第 4 项真实歌曲（《琵琶行》）尚未走新服务全链路。
 
 #### SONG-06 真实歌曲验收记录（2026-10-02，《琵琶行》沉-海，用户提供不入库）
 
@@ -526,7 +541,7 @@ MCP 与 UI 共用命令层。MCP 不是自动调用模型的魔法：未有 agen
 | INT-00 / FB-01 | ✅ 集成者（本会话）2026-10-02 完成，已合并 main | `src/server/feedback.mjs`、`scripts/tests/feedback/` | 见第三节 |
 | FB-02 / FB-03 | ✅ ZCode 会话 2026-10-02 完成，PR #1 已于 2026-10-02 合并 main（e258508，构建通过；node --test 86 项 82 过 0 失败 4 跳过）：FB-02 独占 `src/project/FeedbackComposer.tsx`、`ReviewCompare.tsx`；FB-03 独占 `src/server/mcp-feedback-tools.ts`、`scripts/tests/feedback/mcp-feedback-tools.test.mjs`、`ui-feedback.audit.mjs`、`helpers.mjs`。热点文件的最小接线也在本分支完成（`ProjectStudio.tsx` 替换接线、`reference-server.mjs` 时间广播、`render-worker.mjs` stills 任务、`index.mjs` stills 路由、`mcp-tools.ts`/`mcp-server.ts` 工具注册、`mcp-guide-sync.test.mjs` 合并读取两个工具源文件），集成者评审时重点看这几处 | 见第三节两个 ✅ 小节的命令与结果 |
 | FB-04 端到端验收 | ⬜ 待认领（QA-01 owner）；FB-02/FB-03 已就绪，可开工 | `scripts/tests/collaboration/`；只测，不改实现 | 见第三节 |
-| SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05/06 待集成者接线与端到端验收 | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
+| SONG-00～06 任意歌曲拆解 | ✅ ZCode 会话（2026-10-02）：SONG-00 契约/适配器已验收（e2b2138）；SONG-01 代码+T1 click track 验收通过（F0.9961/bpm误差0.002/下拍32/32，librosa 兜底），pdoom 基准 F0.8372/bpm误差0.65，T3 环境+权重部署中；SONG-02 校正界面、SONG-03 engine-base+scene-lint、SONG-04 规划器已交付代码（66/66 测试）；SONG-05 ✅ 集成者 2026-10-02 接线完成；SONG-06 第 1 项（click track 全链路）✅，第 2/4 项待做；SONG-03 部分完成（见第三节） | `src/song/`、`analyzer/`、`engine-base/`、`scripts/tests/song/`；SONG-03/05 的 `reference-server.mjs`/`render-worker.mjs`/`project-store.mjs` 接线归集成者 | 环境：videograph-analyzer(py3.9,T0/T1) + videograph-t3(py3.12,T3+beat_this)；模型缓存 F:icg\.models；许可表 analyzer/MODELS.md（NC 模型一律不进默认链路）；双环境详情见 analyzer/environment.md；SONG-06 验收由本会话（QA-01 owner）执行 |
 | INTEGRATION 集成与发布检查 | 当前 AI 暂任，交接时明确更换 | 下述共享热点文件 | 审阅接口变更、统一接线、合并分支、跑全量验收，最后更新本计划 |
 | CLEANUP-01 移除旧演示视图（单镜头工坊/教学/创意/旧工作流），只保留真实工作台 | ✅ ZCode 会话（集成者）2026-10-01 完成，已合回 main | 删除 `src/shot/`（full-song.json 迁至 `src/song/data/`）、`src/components/`、`src/llm/`、`src/blackboard/`、`src/memory/`、`src/lyrics/`、`src/render/`、`src/pdoom/tasks.ts`、`src/types.ts`、`src/styles.css`（其中工程工作台复用的 53 条外壳/节点样式迁入 `project.css`）、7 个旧审计脚本；重写 `main.tsx`、`vite.config.ts`、`audit-all.mjs`、`mcp-server.ts`（0.2.0，仅 `project_*` 工具）；移除顶栏死链接 | 已运行验证：`npm run build`（包体 1706KB→451KB）、领域测试 24/24 + brand/协作/文档/反馈套件 45 过、`npm run audit`（project-view-audit 全绿）、`npm run audit:reference`、`transition-integration-audit`（隔离实例四模式全过）；MCP-GUIDE 同步 + sync-platform + skill 1.1.0。附注：audit-all 默认目标为参考复现工程，`VIDEOGRAPH_AUDIT_PROJECT` 可覆盖 |
 

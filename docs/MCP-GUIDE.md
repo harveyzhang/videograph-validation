@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具（含 FB-02/FB-03 意见与画面工具）；§6 为计划中工具，未实现前不要调用。
+toolset: 2026-10-02 · server `videograph-pdoom` 0.2.0 · 状态：§3 为已实现工具（含 FB-02/FB-03 意见与画面工具、SONG-05 歌曲分析与规划工具）；§6 为计划中工具，未实现前不要调用。
 
 > CLEANUP-01（2026-10-01）：旧演示视图（单镜头工坊 / P(DOOM) 教学）的 `shot_queue_*`、`shot_cards_*`、`pdoom_*`、`lyric_research_draft` 工具已随代码一并移除；本指南只覆盖真实工作台的 `project_*` 工具。
 
@@ -63,8 +63,20 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | 工具 | 必填参数 | 作用 / 返回 |
 |---|---|---|
 | `project_list` | — | 本地工程列表 |
-| `project_create_from_bgm` | `audioPath` | **当前只支持 pdoom-video 原始 BGM**（字节指纹匹配，复用已对齐分析，标记为参考导入）；其他音频返回 422。任意歌曲见 §6 与 ROADMAP SONG 冲刺 |
+| `project_create_from_audio` | `audioPath` | 任意本地音频建工程，可选 `name / lyricsText / lrcPath / language / stages`（`t0/t1/t3` 组合，必须含 `t1`）。指纹命中 pdoom-video 原 BGM → 参考导入（行为不变）；否则新歌工程 `analysis-pending`：复制通用引擎（不含绑定原曲歌词的场景），后台自动分析（有 `lyricsText/lrcPath` 才做 t3 歌词对齐），完成后转 `analysis-draft`，失败转 `analysis-failed`（`analysis.error` 说明原因，人在界面/HTTP 重试） |
+| `project_create_from_bgm` | `audioPath` | `project_create_from_audio` 的别名（保留兼容） |
 | `project_get` | `projectId` | 完整工程：镜头、转场、意见、版本、输出规格。默认只返回歌曲摘要，`includeAnalysis: true` 返回完整词级歌词/节拍/包络 |
+
+### 歌曲分析与规划（SONG-05）
+
+工程状态机：`analysis-pending →（analysis-failed）→ analysis-draft → analysis-confirmed → planned → 正常镜头流程`。参考导入工程没有 `status` 字段，直接是正常镜头流程。新歌工程在 `planned` 之前不能 validate/stills/render。
+
+| 工具 | 必填参数 | 作用 / 返回 |
+|---|---|---|
+| `song_analysis_get` | `projectId` | 读取 `videograph-analysis/v2` 分析与 `provenance`、当前 `inputRevision`。默认层 `audio / rhythm / sections / lyrics`；`envelopes / onsets` 体积大，需在 `layers` 中显式请求。可选 `startTime / endTime`（秒）按时间段过滤。无歌词音频没有 `lyrics` 层（不会套用旧工程歌词） |
+| `song_lyrics_submit` | `projectId, expectedInputRevision, lyrics` | 整层替换歌词：`{ lines: [{ text, start, end, words: [{ w, start, end }] }], language? }`（秒）。经契约校验（时间在曲长内、行按时间排列、词在行内）后刷新引擎数据；工程回到 `analysis-draft`，需再次确认。agent 修正记 `humanConfirmed: false` |
+| `song_analysis_confirm` | `projectId` | 确认分析，`analysis-draft → analysis-confirmed`。agent 可调用，记为 `confirmedBy: mcp`；调用前先 `song_analysis_get` 核对，明显误听或节拍偏差先修正 |
+| `project_plan_submit` | `projectId, expectedInputRevision` | 仅 `analysis-confirmed` 可用。`plan: [{ lineText \| sectionIndex \| t, title?, prompt?, id? }]`：每项是一刀的**锚点**，服务端推导切点（歌词行 → 行首词前最近拍；`t` 量化到帧且不得切在词中间），首刀强制 0、末镜到曲尾；可带 `reasoning`。省略 `plan` → 确定性兜底（每段一镜，`source: fallback-deterministic`，不算 AI 创作）。成功后工程 → `planned`，镜头 `module: null`、`needs-generation`，相邻镜头生成默认硬切转场 |
 
 ### 镜头
 
@@ -125,6 +137,19 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 
 转场意见同理：`project_transition_get` → `project_transition_configure`（带 `addressedFeedbackIds`）→ `project_transition_validate`。
 
+### 新歌流程：从音频到成片
+
+```
+create_from_audio → 轮询 project_get 至 analysis-draft → song_analysis_get 核对 →（song_lyrics_submit 修正）→ song_analysis_confirm → project_plan_submit → 每镜头：shot_source（模板）→ shot_submit → validate → render
+```
+
+1. `project_create_from_audio`；每隔几秒 `project_get`，直到 `status` 为 `analysis-draft`（`analysis-failed` 就停下报告 `analysis.error`）。
+2. `song_analysis_get` 核对 bpm、下拍、段落、歌词。歌词误听用 `song_lyrics_submit` 改；节拍明显错误（如 bpm 翻倍）先报告给人，不要硬规划。
+3. `song_analysis_confirm`（agent 确认会留痕 `confirmedBy: mcp`，回复里说明你核对了什么）。
+4. `project_plan_submit`：按段落/歌词锚点切镜，`prompt` 写清每镜的创作意图。
+5. 每个镜头 `project_shot_source`：未生成镜头返回 `template: true` 的通用窗口模板（只用 `lyrics.linesIn`、拍点与包络，不用 `ly.get('原句')`）。在模板基础上写场景，`project_shot_submit` 后 `project_validate`。有歌词的镜头同时用 `project_shot_update` 写 `lyricPlan`。
+6. 全部镜头 `ready` 后 `project_render`；成片音轨为工程音频，时长 = 曲长。
+
 ## 5. 常见错误与陷阱
 
 | 现象 | 原因 / 处理 |
@@ -137,6 +162,8 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | 场景运行报错或黑帧 | 先看 `project_job_get` 的 `error`；引擎每帧错误会中止，不会静默黑帧 |
 | `project_stills` 对 `needs-generation` 镜头也能出图 | 预期行为：意见加入即标记待改写，但当前源码仍可渲染——agent 改写前正要看锚点处现状 |
 | stills 图片内容缺失（只有路径） | MCP 进程的 `VIDEOGRAPH_PROJECTS` 与工程服务不一致，读不到产物文件；对齐 env 后重试 |
+| 新歌工程 validate/render 返回 409 `还在 analysis-* 阶段` | 先完成分析确认与 `project_plan_submit` |
+| `project_plan_submit` 报“切点落在一个词的中间” | 换用 `lineText` 锚点，或把 `t` 移到拍点/词间隙 |
 | 新工具不可见 | MCP 会话需要重连 |
 
 ## 6. 计划中的工具与字段（未实现，见 ROADMAP「当前冲刺」）
@@ -144,10 +171,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | 名称 | 预期作用 |
 |---|---|
 | `craft_guide` + MCP resources/prompts | 通过 MCP 读取 shotcraft 技法与“按意见改镜头”流程模板 |
-| `project_create_from_audio` | 任意本地音频建工程（可附歌词/LRC/语言/分析级别）；参考曲仍走指纹导入。`project_create_from_bgm` 保留为别名 |
-| `song_analysis_get / song_analysis_run / song_analysis_patch` | 分层读取、运行固定分析阶段、提交修正（标 mcp 来源） |
-| `song_lyrics_submit` | 提交歌词文本草稿；仍需人确认，AI 不能确认分析 |
-| `project_plan_submit` | 提交新歌的镜头规划（覆盖全曲、切点吸附拍且不切词），校验后生成待改写镜头 |
+| `song_analysis_run / song_analysis_patch` | 运行固定分析阶段、提交节拍/段落修正（标 mcp 来源） |
 
 实现后：把条目移入 §3，更新 §4 流程，并修改 toolset 版本行。
 

@@ -136,7 +136,7 @@ try {
         : shot.id === target.toShotId && sources.right ? { ...shot, ...structuredClone(sources.right) } : shot);
     } else shots = shots.map((shot) => shot.id === target.id ? { ...shot, ...structuredClone(target.reviewBaseline) } : shot);
   }
-  server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions, fps });
+  server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions, fps, audioFile: frozen.audio.engineFile });
   browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
   signal.addEventListener('abort', () => { void browser?.close(); }, { once: true });
@@ -266,7 +266,7 @@ try {
     writeFileSync(list, segments.map((path) => `file '${path.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n'));
     const output = join(outDir, 'pv.mp4');
     progress('合成全片并封装完整 BGM…', 0.99);
-    await runFfmpeg(['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-i', join(dir, 'engine/audio/pdoom.mp3'),
+    await runFfmpeg(['-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-i', join(dir, 'engine', frozen.audio.engineFile ?? 'audio/pdoom.mp3'),
       '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '320k', '-af', 'apad', '-t', String(total / fps), '-movflags', '+faststart', output]);
     job.result = { file: `exports/${jobId}/pv.mp4`, frames: total, seconds: total / fps, fps, samples, revision: frozen.revision, transitions: frozen.transitions.map(({ id, fromShotId, toShotId, mode, duration, easing, direction }) => ({ id, fromShotId, toShotId, mode, duration, easing, direction })), reports };
     writeFileSync(join(outDir, 'manifest.json'), JSON.stringify({ ...job.result, engineHash: frozen.engineHash, audioHash: frozen.audio.hash, credits: frozen.credits }, null, 2));

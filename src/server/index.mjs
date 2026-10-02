@@ -5,9 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
 import { createProjectFromAudio, listProjects, readProject, updateShot, addShotFeedback, acceptShotFeedback, rejectShotFeedback, readShotSource, readShotLyricContext, submitShotSource, updateTransition, configureTransition, askFeedback, replyFeedback, feedbackInbox, projectDir, projectsRoot, productRoot, saveJob, listJobs, readJob, ProjectError, safeId } from './project-store.mjs';
+import { getSongAnalysis, confirmSongAnalysis, submitSongLyrics, submitPlan, retryAnalysis } from './song-project.mjs';
 import { startReferenceServer } from './reference-server.mjs';
 import { feedbackTargetWindow } from './feedback.mjs';
 import { transitionPair, transitionWindow } from './transitions.mjs';
+import { startAnalysisWorker } from './analysis-jobs.mjs';
 
 const port = Number(process.env.VIDEOGRAPH_SERVICE_PORT ?? 5191);
 const allowedOrigins = new Set((process.env.VIDEOGRAPH_STUDIO_ORIGINS ?? 'http://127.0.0.1:5188,http://localhost:5188').split(',').map((origin) => origin.trim()).filter(Boolean));
@@ -46,6 +48,9 @@ function enqueue(projectId, kind, options) {
   if (kind === 'validate-transition' && !project.transitions.some((transition) => transition.id === options.transitionId)) throw new ProjectError('transition not found', 404);
   if (kind === 'validate' && !project.shots.some((shot) => shot.id === options.shotId)) throw new ProjectError('shot not found', 404);
   if (kind === 'export' && [...project.shots, ...project.transitions].some((target) => (target.feedback ?? []).some((note) => note.status !== 'accepted'))) throw new ProjectError('存在未接受的镜头或转场意见：请先配置/改写、校验并确认采用。', 409);
+  if (['validate', 'export', 'stills'].includes(kind) && project.status && project.status !== 'planned') throw new ProjectError(`工程还在 ${project.status} 阶段：先完成分析确认与镜头规划`, 409);
+  if (kind === 'validate' && !project.shots.find((shot) => shot.id === options.shotId).module) throw new ProjectError('镜头还没有源码：先 project_shot_submit', 409);
+  if (kind === 'export' && project.shots.some((shot) => !shot.module || shot.status === 'needs-generation')) throw new ProjectError('有镜头尚未生成源码（needs-generation）', 409);
   if (kind === 'export' && project.transitions.some((transition) => transition.status === 'needs-generation')) throw new ProjectError('有转场指导尚未落实为效果配置', 409);
   let stills = null;
   if (kind === 'stills') {
@@ -129,10 +134,17 @@ const server = createServer(async (req, res) => {
     }
     const artifactRead = req.method === 'GET' && parts[0] === 'projects' && parts[2] === 'files';
     if (url.pathname !== '/health' && !artifactRead && req.headers.authorization !== `Bearer ${serviceToken}`) throw new ProjectError('local service authorization required', 401);
-    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v3-feedback-anchors', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'known-BGM fingerprint cache' }); return; }
+    if (url.pathname === '/health') { json(res, { ok: true, pid: process.pid, apiVersion: 'project-service/v4-song', projectsRoot, activeJob: active?.jobId ?? null, queued: queue.length, analysis: 'reference fingerprint import + SONG analyzer for new audio' }); return; }
     if (url.pathname === '/projects' && req.method === 'GET') { json(res, { projects: listProjects() }); return; }
     if (url.pathname === '/projects' && req.method === 'POST') {
-      const input = await body(req); json(res, createProjectFromAudio(input.audioPath, input.name), 201); return;
+      const input = await body(req);
+      json(res, createProjectFromAudio(input.audioPath, input.name, {
+        lyricsText: input.lyricsText,
+        lrcPath: input.lrcPath,
+        language: input.language,
+        stages: input.stages
+      }), 201);
+      return;
     }
     if (url.pathname === '/import-audio' && req.method === 'POST') {
       const name = decodeURIComponent(String(req.headers['x-file-name'] ?? 'audio.mp3'));
@@ -167,6 +179,11 @@ const server = createServer(async (req, res) => {
     if (parts[2] === 'validate' && req.method === 'POST') { json(res, enqueue(id, 'validate', await body(req)), 202); return; }
     if (parts[2] === 'stills' && req.method === 'POST') { json(res, enqueue(id, 'stills', await body(req)), 202); return; }
     if (parts[2] === 'render' && req.method === 'POST') { json(res, enqueue(id, 'export', await body(req)), 202); return; }
+    if (parts[2] === 'song' && parts[3] === 'analysis' && req.method === 'GET') { json(res, getSongAnalysis(id, url.searchParams)); return; }
+    if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'confirm' && req.method === 'POST') { json(res, confirmSongAnalysis(id, (await body(req)).author ?? 'human')); return; }
+    if (parts[2] === 'song' && parts[3] === 'analysis' && parts[4] === 'retry' && req.method === 'POST') { json(res, retryAnalysis(id)); return; }
+    if (parts[2] === 'song' && parts[3] === 'lyrics' && req.method === 'POST') { const input = await body(req); json(res, submitSongLyrics(id, input.expectedInputRevision, input.lyrics, input.author ?? 'human')); return; }
+    if (parts[2] === 'plan' && req.method === 'POST') { const input = await body(req); json(res, submitPlan(id, input.expectedInputRevision, input.plan, input.reasoning, input.author ?? 'human')); return; }
     if (parts[2] === 'shots' && safeId(parts[3])) {
       if (parts[4] === 'lyrics' && req.method === 'GET') { json(res, readShotLyricContext(id, parts[3])); return; }
       if (parts[4] === 'source' && req.method === 'GET') { json(res, readShotSource(id, parts[3])); return; }
@@ -217,7 +234,7 @@ const server = createServer(async (req, res) => {
       if (preview?.revision !== project.revision) {
         await preview?.server.close();
         if (previews.size >= 2 && !previews.has(key)) { const [oldId, old] = previews.entries().next().value; await old.server.close(); previews.delete(oldId); }
-        const host = await startReferenceServer({ root: join(projectDir(id), 'engine'), shots, transitions, fps: project.output.fps });
+        const host = await startReferenceServer({ root: join(projectDir(id), 'engine'), shots, transitions, fps: project.output.fps, audioFile: project.audio.engineFile });
         preview = { revision: project.revision, server: host }; previews.set(key, preview);
       }
       let range;
@@ -246,18 +263,23 @@ const server = createServer(async (req, res) => {
 
 // 只有成功取得端口后才发布令牌/恢复任务；启动冲突不能破坏已有服务的认证或任务状态。
 server.on('error', (error) => { console.error(error); process.exitCode = 1; });
+let stopAnalysisWorker;
 server.listen(port, '127.0.0.1', () => {
   mkdirSync(dirname(tokenPath), { recursive: true });
   writeFileSync(tokenPath, serviceToken, { mode: 0o600 });
   // 不盲目重跑状态不明的旧进程；已完成分段仍可复用。
   for (const project of listProjects()) for (const job of listJobs(project.id)) {
+    if (job.kind === 'analysis') { if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启；工程仍为 analysis-pending 时会自动重新分析。' }); continue; }
     if (job.status === 'queued') queue.push({ projectId: project.id, jobId: job.id });
     else if (job.status === 'running') saveJob(project.id, { ...job, status: 'interrupted', error: '服务重启，旧渲染进程未恢复；可重新发起并复用已完成分段。' });
   }
+  // SONG-05: 启动分析任务后台处理器
+  stopAnalysisWorker = startAnalysisWorker();
   console.log(`VideoGraph project service http://127.0.0.1:${port}`); pump();
 });
 async function shutdown() {
   closing = true;
+  if (stopAnalysisWorker) stopAnalysisWorker();
   active?.child.send('cancel');
   for (const preview of previews.values()) await preview.server.close();
   server.close();
