@@ -133,7 +133,9 @@
 - **核查结果（集成者）**：`npm run build` ✓；`node --test "scripts/tests/**/*.test.mjs" scripts/project-store-test.mjs scripts/lyrics-transitions-test.mjs` → 139/139 → 加回归后 140/140。共享文件接线（index/project-store/render-worker/mcp-server/mcp-tools）与现有模式一致；导出闸门只作用于有导演方案的工程。
 - **核查发现并修复**：对**没有导演方案的已有工程**（《THE LAST AUDIT》、参考复现工程）调用 `project_director_get` 直接崩溃（`director.operations/maxRepairs` 未判空）——测试夹具总是先提交方案，没覆盖这条入口。已修（无方案时跳过租约/预算计算）并加回归测试；两个真实工程实测返回 `phase: direction`、下一步 `project_director_submit`。
 - 流程问题：该会话未在本文件登记工作包与结果（违反单一计划约定），已由集成者补记。
-- **人工未验收**：尚未有真实 GLM 会话完整跑通“方案 → 制作 → 自评 → 人接受 → 导出”。
+- **首次真实 GLM 实跑（2026-10-02，《THE LAST AUDIT》）**：从 direction 走到 `awaiting-human`：先 `casebook_search` 选参考案例 ageint 定法则，提交导演方案 v1（7 个词锚重音）；22 镜同版源码重新绑定 receipt、21 转场维持原配置；43 项技术验证 0 失败、47 个审片证据任务完成；证据化自评 current。实跑发现服务端 bug（旧任务快照缺 transitions 导致导演签名崩溃），GLM 已做容错修复，集成者加回归测试并提交（`204ffdb`）。
+  - 集成者复核：全片节奏指标属实（运动中位 0.0018、下拍命中 15%、高能量小节 13.5%、99% 画面峰在拍/词上、无闪烁）。**分歧**：GLM 把响段运动不足记为 warning，但死区累计约 75s/157s（近一半时长），是本片主要问题，与人此前“太素了”一致；shoggoth 被记为 intentional（理由“指标低估细线画面”）——帧序列显示只有缓慢形变、副歌下拍与 “lies/eyes” 均无反应，集成者认为应纳入返修。建议导出前返修一轮：spacetime > loom > leftturn > shoggoth > bureau/stack/ilya，目标为高能量小节画面运动 ≥3 级、高能量小节下拍命中 ≥35%、在拍比例 ≥85%、闪烁 ≤3 次/秒，保持歌词版式与配色。
+  - 待人工：prompt1“太素/加转场”候选的对比与采用/拒绝；看片后决定是否返修与导出。
 
 ### FX 冲刺：动效库 → 插件市场（2026-10-02 用户新方向；排在 AE-P0 之后、与 AE-P1 并行）
 
