@@ -170,6 +170,8 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `casebook_list` | — | Code Video Casebook 的 31 个真实代码视频案例（id、标题）。做新片前先挑 1–3 个最接近的 |
 | `casebook_case` | `caseId` | 案例检索卡（一句话、规格、何时抄、架构、最值得抄的做法、坑、CoExp 行号导读）+ 源码清单 + 20 帧联系表图片 |
 | `casebook_search` | `query` | 正则检索，返回 `path:行号:内容`；`scope`：`cards`（默认）/ `coexp` / `source`（必须给 `cases`，按需下载源码）/ `all` |
+| `fx_library_search` | `query` | Opus 视频提示词库检索（正则），返回 `来源id:路径:行号: 片段`；来源见 `fx_sources`（kind=prompts）：lemo-opuscar 43 种风格提示词（MIT）、创作者原文提示词与案例合集（MIT / CC BY 4.0，引用的他人提示词权利归原作者）。不给 `sources` 只搜已下载的库；给 `sources:[id]` 按需下载（首次 10–60 秒，超时分次续传）。4 个无许可证的仓库只登记链接、不下载 |
+| `fx_library_read` | `source, path` | 读提示词库文件（路径相对该仓库根，如 `styles/watercolor/STYLE.md`），`lines: "起:止"`，单次 ≤12k 字符 |
 | `casebook_read` | `path` | 读文件（相对 casebook 根，如 `references/cases/oneink/CoExp.md`、`references/techniques.md`），`lines: "起:止"`，单次 ≤12k 字符 |
 
 **许可与边界**：案例库作者已口头授权使用其自有内容（书面许可待落地，不进入对外发布包）；字体、音乐音效、视频、真人照片等第三方素材不在下载范围。案例里的品牌名、成员信息、二维码属于原项目——参考结构、节奏和做法，做新片时换成用户自己的内容，事实不确定就问人。案例是别的技术栈（Python/Canvas/HyperFrames 等），借思路后按本平台引擎契约重写场景，不要把它们的代码原样塞进镜头。

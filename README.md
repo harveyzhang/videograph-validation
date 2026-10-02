@@ -2,6 +2,10 @@
 
 面向 ToB 产品宣发与音乐人 PV 的本地 AI 视频工程工作台——**LLM 的 After Effects**：LLM 经 MCP 建工程、写镜头、调节奏、渲染并用节奏/画面感知工具自查；前端是人看片、定位意见、对比与采用的审阅室。工程可复现，支持镜头级局部修改与分段渲染。
 
+![审阅室](docs/review-room.png)
+
+**怎么用**：`npm run service` + `npm run dev` 打开审阅室；让任意支持 MCP 的 LLM（Claude、GLM 等）连接 `npm run mcp`，从 `direct_video` prompt 或 `project_director_next` 开始。动效/案例/提示词库按需从上游下载，不随本仓库分发（`effects/sources.json`）。当前状态与待办见 ROADMAP「〇、收尾状态」。
+
 ## 文档入口
 
 - [ROADMAP.md](ROADMAP.md)：**唯一计划与进度文档**。查看当前阶段、已验收项目和未完成边界；第十一节包含多人并行的目录分工、共享文件 owner 和合并规则。

@@ -2,9 +2,24 @@
   "schema": 1,
   "note": "动效库/案例库的上游来源登记。本仓库只保存这份元数据（地址、固定 commit、许可、署名、允许下载的文件规则），不保存上游代码或素材；用户机器在需要时从上游按固定 commit 下载，并用 git blob 哈希校验。见 ROADMAP「FX 冲刺」。",
   "policy": {
-    "spdxAllow": ["MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "Zlib", "ISC", "CC0-1.0", "CC-BY-4.0", "OFL-1.1"],
-    "licenseRefAllow": ["LicenseRef-author-grant"],
-    "hosts": ["api.github.com", "raw.githubusercontent.com"]
+    "spdxAllow": [
+      "MIT",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "Apache-2.0",
+      "Zlib",
+      "ISC",
+      "CC0-1.0",
+      "CC-BY-4.0",
+      "OFL-1.1"
+    ],
+    "licenseRefAllow": [
+      "LicenseRef-author-grant"
+    ],
+    "hosts": [
+      "api.github.com",
+      "raw.githubusercontent.com"
+    ]
   },
   "sources": [
     {
@@ -17,15 +32,67 @@
       "licenseStatus": "author-grant-pending",
       "licenseNote": "2026-10-02 作者口头授权用户使用其自有内容（代码、文档、自生成配乐与成片）；书面 LICENSE 待作者在仓库落地。第三方素材不在授权范围，已由下方规则排除。",
       "attribution": "Code Video Casebook by t01090943940-afk (https://github.com/t01090943940-afk/Videos)",
-      "include": ["skills/code-video-casebook/**"],
-      "exclude": ["**/*.ttf", "**/*.otf", "**/*.woff", "**/*.woff2", "**/*.mp3", "**/*.wav", "**/*.flac", "**/*.m4a", "**/*.ogg", "**/*.mp4", "**/*.mov", "**/*.webm", "**/*.zip", "**/*.tgz", "**/*.skill"],
-      "extensions": ["md", "json", "txt", "js", "mjs", "cjs", "ts", "py", "html", "css", "glsl", "frag", "vert", "yaml", "yml", "sh", "toml", "csv", "jpg"],
-      "imageAllow": ["**/references/cases/*/preview.jpg"],
+      "include": [
+        "skills/code-video-casebook/**"
+      ],
+      "exclude": [
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff",
+        "**/*.woff2",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.flac",
+        "**/*.m4a",
+        "**/*.ogg",
+        "**/*.mp4",
+        "**/*.mov",
+        "**/*.webm",
+        "**/*.zip",
+        "**/*.tgz",
+        "**/*.skill"
+      ],
+      "extensions": [
+        "md",
+        "json",
+        "txt",
+        "js",
+        "mjs",
+        "cjs",
+        "ts",
+        "py",
+        "html",
+        "css",
+        "glsl",
+        "frag",
+        "vert",
+        "yaml",
+        "yml",
+        "sh",
+        "toml",
+        "csv",
+        "jpg"
+      ],
+      "imageAllow": [
+        "**/references/cases/*/preview.jpg"
+      ],
       "maxFileBytes": 1000000,
       "licenseOverrides": [
-        { "glob": "skills/code-video-casebook/assets/cases/atlas/motion-library-atlas/**", "license": "MIT", "attribution": "motion-library-atlas © 2026 VIBEMOTION workstation contributors (MIT)" },
-        { "glob": "skills/code-video-casebook/assets/cases/stopmotion/stop-motion-3d/**", "license": "MIT", "attribution": "stop-motion-3d skill © 2026 stop-motion-3d skill authors (MIT)" },
-        { "glob": "skills/code-video-casebook/assets/cases/moonlamp/moonfilm/scripts/kit/**", "license": "MIT", "attribution": "moonfilm kit © 2026 stop-motion-3d skill authors (MIT)" }
+        {
+          "glob": "skills/code-video-casebook/assets/cases/atlas/motion-library-atlas/**",
+          "license": "MIT",
+          "attribution": "motion-library-atlas © 2026 VIBEMOTION workstation contributors (MIT)"
+        },
+        {
+          "glob": "skills/code-video-casebook/assets/cases/stopmotion/stop-motion-3d/**",
+          "license": "MIT",
+          "attribution": "stop-motion-3d skill © 2026 stop-motion-3d skill authors (MIT)"
+        },
+        {
+          "glob": "skills/code-video-casebook/assets/cases/moonlamp/moonfilm/scripts/kit/**",
+          "license": "MIT",
+          "attribution": "moonfilm kit © 2026 stop-motion-3d skill authors (MIT)"
+        }
       ],
       "thirdPartyNotes": "不下载：字体（多为 OFL，需要时从字体官方来源另行获取）、音乐与音效（含现成歌曲与素材库音效）、视频、除联系表 preview.jpg 外的图片（含真人照片、来源不明纹理）、压缩包。文本中出现的品牌名、成员信息、二维码属于原项目，做模板时必须替换。"
     },
@@ -40,10 +107,440 @@
       "licenseNote": "仓库级许可未被 GitHub 识别（NOASSERTION）；每个转场文件头部有 `// License: X`，按文件判定，只下载头部许可在白名单内的文件。",
       "licenseHeader": "^//\\s*License:\\s*(.+?)\\s*$",
       "attribution": "gl-transitions (https://github.com/gl-transitions/gl-transitions), per-file authors",
-      "include": ["transitions/*.glsl"],
+      "include": [
+        "transitions/*.glsl"
+      ],
       "exclude": [],
-      "extensions": ["glsl"],
+      "extensions": [
+        "glsl"
+      ],
       "maxFileBytes": 200000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "yihui-awesome-videos",
+      "kind": "prompts",
+      "title": "awesome-opus5-5-videos：Opus 5.5 爆款视频与提示词合集",
+      "repo": "yihui-dev/awesome-opus5-5-videos",
+      "commit": "3d54892e2ae5b0e8d337171e6508bba4cec01ab8",
+      "url": "https://github.com/yihui-dev/awesome-opus5-5-videos",
+      "root": "",
+      "license": "MIT",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "仓库 MIT。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "yihui-dev/awesome-opus5-5-videos (https://github.com/yihui-dev/awesome-opus5-5-videos), MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "athemeroy-awesome-videos",
+      "kind": "prompts",
+      "title": "awesome-claude-5-5-videos（原 awesome-opus-5-5-videos）：案例数据与分析",
+      "repo": "athemeroy/awesome-claude-5-5-videos",
+      "commit": "497986b6bcacf20a998f2dd271f818688bb2f756",
+      "url": "https://github.com/athemeroy/awesome-claude-5-5-videos",
+      "root": "",
+      "license": "CC-BY-4.0",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "仓库 CC BY 4.0（需署名）；另见其 THIRD_PARTY.md。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "athemeroy/awesome-claude-5-5-videos (https://github.com/athemeroy/awesome-claude-5-5-videos), CC-BY-4.0",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "chuspeeism-awesome-videos",
+      "kind": "prompts",
+      "title": "awesome-opus-5-5-videos（chuspeeism）：分类收录的视频案例",
+      "repo": "chuspeeism/awesome-opus-5-5-videos",
+      "commit": "028bc5223b37d68aaa24b1a9739b8cfcde59eaaa",
+      "url": "https://github.com/chuspeeism/awesome-opus-5-5-videos",
+      "root": "",
+      "license": "MIT",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "MIT 只覆盖其原创目录文字与仓库代码（LICENSE 原文声明）。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "chuspeeism/awesome-opus-5-5-videos (https://github.com/chuspeeism/awesome-opus-5-5-videos), MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "tripo-opus-prompts",
+      "kind": "prompts",
+      "title": "awesome-opus-5-5-prompts：3D 场景/游戏/动画/模拟提示词",
+      "repo": "TripoGrowthLab/awesome-opus-5-5-prompts",
+      "commit": "d083bc4d56564a26cfd2e590a34376362f8c8b4b",
+      "url": "https://github.com/TripoGrowthLab/awesome-opus-5-5-prompts",
+      "root": "",
+      "license": "MIT",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "MIT 只覆盖其工具与编辑文档（LICENSE 原文 Scope 声明，另见 RIGHTS.md）。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "TripoGrowthLab/awesome-opus-5-5-prompts (https://github.com/TripoGrowthLab/awesome-opus-5-5-prompts), MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv",
+        "mjs"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "beatapi-opus-videos",
+      "kind": "prompts",
+      "title": "BeatAPI Opus 5.5 Videos：可溯源的创意编程视频",
+      "repo": "BeatAPI/awesome-opus-5-5-videos",
+      "commit": "a6af6772454710aab3ff8ee8a819f066701300e8",
+      "url": "https://github.com/BeatAPI/awesome-opus-5-5-videos",
+      "root": "",
+      "license": "CC-BY-4.0",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "BeatAPI 撰写的文档与摘要为 CC BY 4.0（署名 “BeatAPI Opus 5.5 Videos” 并链接仓库），校验代码为 MIT。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "BeatAPI Opus 5.5 Videos (https://github.com/BeatAPI/awesome-opus-5-5-videos), CC BY 4.0 / MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv",
+        "mjs"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "lemo-opuscar-styles",
+      "kind": "prompts",
+      "title": "lemo-opuscar：43 种影片风格，每种一个可复用风格提示词 + 短片",
+      "repo": "lemomo-ai/lemo-opuscar",
+      "commit": "c4bc370eb15d36c88e074fdba1b0248b62a8e419",
+      "url": "https://github.com/lemomo-ai/lemo-opuscar",
+      "root": "",
+      "license": "MIT",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "MIT（LemoLab 自有的风格提示词与代码）；demo 中的采样库、字体、音乐、人声保留各自许可（见各 demo 的 CREDITS），未下载。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "lemomo-ai/lemo-opuscar (https://github.com/lemomo-ai/lemo-opuscar), MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.py",
+        "**/*.sh",
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "xrayluan-video-prompts",
+      "kind": "prompts",
+      "title": "awesome-opus-5-5-video-prompts：创作者原文提示词与演示",
+      "repo": "X-RayLuan/awesome-opus-5-5-video-prompts",
+      "commit": "b9524552dfcf96c4bf3569fa1145f94b63bc2a76",
+      "url": "https://github.com/X-RayLuan/awesome-opus-5-5-video-prompts",
+      "root": "",
+      "license": "MIT",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "仓库 MIT；收录的是“创作者原文提示词”（另见 RIGHTS.md），提示词本身权利归各创作者。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "X-RayLuan/awesome-opus-5-5-video-prompts (https://github.com/X-RayLuan/awesome-opus-5-5-video-prompts), MIT",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 200000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "lievan-video-prompts",
+      "kind": "prompts",
+      "title": "awesome-opus-5.5-video-prompts：334 条经核实的视频提示词",
+      "repo": "Li-Evan/awesome-opus-5.5-video-prompts",
+      "commit": "7f731215e5efbce772caf49d8dd016f310a97377",
+      "url": "https://github.com/Li-Evan/awesome-opus-5.5-video-prompts",
+      "root": "",
+      "license": "CC-BY-4.0",
+      "licenseStatus": "curator-licensed",
+      "licenseNote": "仓库 CC BY 4.0（需署名）；提示词来自各使用者。 清单中引用的他人提示词、视频、图片、作者名与链接页面不属于本仓库许可范围，权利归原作者：只作参考与灵感，引用时注明原作者，不要把原文提示词逐字放进对外分发的产物。",
+      "attribution": "Li-Evan/awesome-opus-5.5-video-prompts (https://github.com/Li-Evan/awesome-opus-5.5-video-prompts), CC-BY-4.0",
+      "include": [
+        "**"
+      ],
+      "exclude": [
+        "**/*.mp4",
+        "**/*.webm",
+        "**/*.mov",
+        "**/*.webp",
+        "**/*.png",
+        "**/*.jpg",
+        "**/*.jpeg",
+        "**/*.gif",
+        "**/*.svg",
+        "**/*.mp3",
+        "**/*.wav",
+        "**/*.ttf",
+        "**/*.otf",
+        "**/*.woff2",
+        "**/*.zip"
+      ],
+      "extensions": [
+        "md",
+        "txt",
+        "json",
+        "yaml",
+        "yml",
+        "csv"
+      ],
+      "maxFileBytes": 300000,
+      "licenseOverrides": []
+    },
+    {
+      "id": "opusvideo-awesome-video",
+      "kind": "prompts",
+      "title": "awesome-claude-video：Opus 5.5 视频与动画合集（含实现指南）",
+      "repo": "opusvideo/awesome-claude-video",
+      "commit": "e2be0c32a098caaeed3a839ff9e53ddaf22a82ae",
+      "url": "https://github.com/opusvideo/awesome-claude-video",
+      "root": "",
+      "license": "LicenseRef-none",
+      "licenseStatus": "no-license-link-only",
+      "downloadable": false,
+      "licenseNote": "仓库没有许可证（2026-10-02 核查）：不下载、不收录，只登记链接。agent 有网页能力时可去看思路，必须用自己的话重写；拿到作者授权或仓库加了许可证后再改为可下载。",
+      "attribution": "opusvideo/awesome-claude-video (https://github.com/opusvideo/awesome-claude-video)",
+      "include": [],
+      "exclude": [],
+      "extensions": [],
+      "maxFileBytes": 0,
+      "licenseOverrides": []
+    },
+    {
+      "id": "joeseesun-opus-prompts",
+      "kind": "prompts",
+      "title": "opus-video-prompts：54 个案例与可复制提示词（中文）",
+      "repo": "joeseesun/opus-video-prompts",
+      "commit": "7977c807781d4ba7c235247b8899a72575a30d00",
+      "url": "https://github.com/joeseesun/opus-video-prompts",
+      "root": "",
+      "license": "LicenseRef-none",
+      "licenseStatus": "no-license-link-only",
+      "downloadable": false,
+      "licenseNote": "仓库没有许可证（2026-10-02 核查）：不下载、不收录，只登记链接。agent 有网页能力时可去看思路，必须用自己的话重写；拿到作者授权或仓库加了许可证后再改为可下载。",
+      "attribution": "joeseesun/opus-video-prompts (https://github.com/joeseesun/opus-video-prompts)",
+      "include": [],
+      "exclude": [],
+      "extensions": [],
+      "maxFileBytes": 0,
+      "licenseOverrides": []
+    },
+    {
+      "id": "zhuyansen-awesome-video",
+      "kind": "prompts",
+      "title": "awesome-opus-5.5-video：视频/动态图形/3D/游戏案例",
+      "repo": "zhuyansen/awesome-opus-5.5-video",
+      "commit": "e5fcfc7121ce52d21a1790dedc761a7c4133e6c4",
+      "url": "https://github.com/zhuyansen/awesome-opus-5.5-video",
+      "root": "",
+      "license": "LicenseRef-none",
+      "licenseStatus": "no-license-link-only",
+      "downloadable": false,
+      "licenseNote": "仓库没有许可证（2026-10-02 核查）：不下载、不收录，只登记链接。agent 有网页能力时可去看思路，必须用自己的话重写；拿到作者授权或仓库加了许可证后再改为可下载。",
+      "attribution": "zhuyansen/awesome-opus-5.5-video (https://github.com/zhuyansen/awesome-opus-5.5-video)",
+      "include": [],
+      "exclude": [],
+      "extensions": [],
+      "maxFileBytes": 0,
+      "licenseOverrides": []
+    },
+    {
+      "id": "specimen-and-signal",
+      "kind": "prompts",
+      "title": "specimen-and-signal：暗色科学仪器风格的提示词、字体与配方",
+      "repo": "0xpratzyy/specimen-and-signal",
+      "commit": "ca884a9cf557d38fb9c331644d11fd93bf58553d",
+      "url": "https://github.com/0xpratzyy/specimen-and-signal",
+      "root": "",
+      "license": "LicenseRef-none",
+      "licenseStatus": "no-license-link-only",
+      "downloadable": false,
+      "licenseNote": "仓库没有许可证（2026-10-02 核查）：不下载、不收录，只登记链接。agent 有网页能力时可去看思路，必须用自己的话重写；拿到作者授权或仓库加了许可证后再改为可下载。",
+      "attribution": "0xpratzyy/specimen-and-signal (https://github.com/0xpratzyy/specimen-and-signal)",
+      "include": [],
+      "exclude": [],
+      "extensions": [],
+      "maxFileBytes": 0,
       "licenseOverrides": []
     }
   ]

@@ -121,6 +121,7 @@ async function httpGet(registry, url, { fetchImpl = fetch, json = false } = {}) 
 
 /** 固定 commit 的文件树；缓存后永不过期（commit 不可变）。 */
 export async function sourceTree(registry, source, options = {}) {
+  check(source.downloadable !== false, `${source.id}: 许可不明，只登记链接、不下载（${source.url ?? source.repo}）`);
   const file = join(sourceDir(source), 'tree.json');
   if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'));
   const data = await httpGet(registry, `https://api.github.com/repos/${source.repo}/git/trees/${source.commit}?recursive=1`, { ...options, json: true });
@@ -139,9 +140,10 @@ function readLedger(source) {
  * 确保这些文件已在本机缓存：下载 → 校验 git blob SHA → 判定许可 → 原子写入。
  * 许可不在白名单的文件不落盘，记入 rejected。返回 { fetched, cached, rejected }。
  */
-export async function ensureFiles(registry, source, entries, { fetchImpl = fetch, concurrency = 8 } = {}) {
+export async function ensureFiles(registry, source, entries, { fetchImpl = fetch, concurrency = 8, deadline = Infinity } = {}) {
+  check(source.downloadable !== false, `${source.id}: 许可不明，只登记链接、不下载`);
   const ledger = readLedger(source);
-  const result = { fetched: [], cached: [], rejected: [] };
+  const result = { fetched: [], cached: [], rejected: [], pending: 0 };
   const queue = entries.filter((entry) => {
     const prior = ledger.rejected[entry.path];
     // 拒绝记录保存原始声明：许可白名单或规范化规则变了就重新判定，而不是永久拒绝。
@@ -152,7 +154,8 @@ export async function ensureFiles(registry, source, entries, { fetchImpl = fetch
     return true;
   });
   const worker = async () => {
-    for (let entry = queue.shift(); entry; entry = queue.shift()) {
+    // deadline：到时不再取新文件（MCP 客户端常见 60 秒超时），已下载的照常落盘，下次调用续传。
+    for (let entry = queue.shift(); entry; entry = Date.now() < deadline ? queue.shift() : undefined) {
       const url = `https://raw.githubusercontent.com/${source.repo}/${source.commit}/${entry.path.split('/').map(encodeURIComponent).join('/')}`;
       const content = await httpGet(registry, url, { fetchImpl });
       check(gitBlobSha(content) === entry.sha, `${entry.path}: 内容校验失败（与固定 commit 的 git 哈希不一致）`);
@@ -169,6 +172,7 @@ export async function ensureFiles(registry, source, entries, { fetchImpl = fetch
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, worker));
+  result.pending = queue.length;
   if (result.fetched.length || result.rejected.length) writeAtomic(join(sourceDir(source), 'provenance.json'), JSON.stringify(ledger, null, 2));
   return result;
 }

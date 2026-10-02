@@ -3,6 +3,22 @@
 > **唯一计划文档。** 自 2026-09-30 起，所有后续架构、阶段任务、优先级和验收计划均在此维护；不再建立并行的 TODO/阶段规划文件。HANDOFF 只放运行、交接说明并链接这里。
 > 状态约定：✅ 已实际验收；🚧 实现/验证中；⬜ 尚未完成。写出代码不等于完成。
 
+## 〇、收尾状态（2026-10-02，用户要求完结本阶段）
+
+**产品形态**：VideoGraph = LLM 的 After Effects。LLM 经 MCP（server `videograph` 0.5.0，47 个工具 + resources + prompts）建工程、分析音乐、规划、写镜头、做节奏与画面自查、走导演闭环；人在前端“审阅室”看片、定位意见、对比采用、接受审片。
+
+**已交付并运行验证**（测试 161/161、`npm run build` ✓、浏览器验收 ui-feedback / FB-04 端到端 / project-view 全绿）：
+- 工程复现与导出：参考片 22 镜 1080p 全片导出、分段缓存、导出清单；任意音频建工程（节拍/段落/歌词分析、确认、规划）。
+- 人工意见闭环：定位锚点、保留项、澄清对话、逐条响应、修改前后对比、采用/拒绝（AI 不能接受）。
+- LLM 感知工具：节奏表、帧序列、全片缩略图、节奏报告（rhythm-v7：相对运动、帧率无关，按 pdoom 参考片校准）。
+- AI 导演闭环：方案 → 下一步 → 租约/回执 → 证据化自评 → 人工接受 → 导出闸门；已用 GLM 在《THE LAST AUDIT》上实跑两轮。
+- 动效/知识库（按需下载、不分发）：14 个登记来源——Videos 案例库（作者授权）、gl-transitions 125 个转场（逐文件许可）、8 个 Opus 视频提示词库（MIT / CC BY 4.0，已在本机预下载约 2,090 个文本文件）、4 个无许可证仓库只登记链接。
+- 前端审阅室：大画面 + 全片时间线（段落/镜头/转场/意见）、缩略图镜头列表、审片卡（阶段/阻塞/AI 自评/证据图/人工接受）、意见输入；节点图为只读结构视图。截图 `docs/review-room.png`。
+
+**《THE LAST AUDIT》待人工的两步（AI 不能代做）**：① 在 `prompt1` 上对比“太素/加转场”候选并采用或拒绝；② 审片接受。注意：GLM 的自评 v4 把 7 个返修镜头记为 blocking，界面的“接受”会因此禁用——若决定按现状接受，需让 AI（GLM）按你的决定重新提交自评，把这 7 项改为 warning 并注明“人决定接受现状”，再在界面接受、导出。
+
+**已知限制 / 下一阶段**：FX-01（引擎内套用动效与 gl-transitions 转场）、动效包 manifest 与导出 CREDITS 汇总、AE-P1 的节奏设计/风格基准节点与全片/段落范围意见、AE-P2 属性 schema 与节拍关键帧、BUG-03/04 运维提醒、Videos 仓库书面 LICENSE 待作者落地、中文字体子集化（SONG-03）。
+
 ## 一、产品目标与不变原则
 
 服务 **ToB 产品宣发** 与 **C 端音乐人 PV**。以 `pdoom-video` 这类优秀 AI 创作工程为参照，使工程可以稳定复现、局部修改。
@@ -192,6 +208,7 @@
     - 实测：casebook 31 案例、参考文本 121 个文件约 12 秒下完；按需拉 ai-rise 源码 14 个文件（字体/音频被排除）；gl-transitions 125 个转场全部通过逐文件许可（123 MIT、2 BSD；首轮因 “BSD 3 Clause” 写法被误拒，已修规范化并让拒绝记录可复判）。
     - 测试：`scripts/tests/fx/fetcher.test.mjs`（8 项：选择规则、逐文件许可、子目录覆盖、篡改拒绝、路径/主机限制、缓存不再联网、规则放宽后复判）+ `fx-mcp.test.mjs`（3 项离线 stdio）；全量 151/151，`npm run build` ✓。
     - 未做（FX-00 剩余）：动效包 manifest/provenance JSON Schema、导出 CREDITS 自动汇总。
+  - **提示词/知识库来源（2026-10-02 用户追加 12 个仓库，已运行验证）**：逐个核查许可——可下载 8 个：yihui-dev（MIT）、athemeroy/awesome-claude-5-5-videos（原 awesome-opus-5-5-videos，CC BY 4.0）、chuspeeism（MIT，仅覆盖其目录文字与代码）、TripoGrowthLab（MIT，Scope 不含第三方提示词）、BeatAPI（文档 CC BY 4.0 + 代码 MIT）、lemomo-ai/lemo-opuscar（MIT，43 种风格提示词为其自有）、X-RayLuan（MIT，收录创作者原文提示词）、Li-Evan（CC BY 4.0）；只登记链接 4 个（无许可证）：opusvideo/awesome-claude-video、joeseesun/opus-video-prompts、zhuyansen/awesome-opus-5.5-video、0xpratzyy/specimen-and-signal。各清单引用的他人提示词权利归原作者，只作参考并注明来源。只下载文本（md/txt/json/yaml/csv），排除视频/图片/音频；新 MCP 工具 `fx_library_search / fx_library_read`（不指定来源只搜已下载库；按需下载有 40 秒时限可续传）。本机已预下载 8 库约 2,090 个文件（85 秒），全库检索 0.3 秒。测试 `scripts/tests/fx/library.test.mjs`（5 项）+ fx-mcp 真实 stdio 调用。
 - **FX-01 运行时**：引擎内动效宿主——每镜头后期链（复用 `gl.ts` 的 `FSPass/makeRT`）、转场节点新增 `mode: effect`（gl-transitions 接口）、参数 schema 校验、节拍绑定（参数 = 基础值 + 强度 × 脉冲(beatPhase/kick/词起点)）；缓存键含动效包 hash。验收：同输入逐像素一致；改动效参数只让该镜头/该转场缓存失效。
 - **FX-02 首批 30 个**：15 转场（gl-transitions）、10 后期（postprocessing/three examples/glfx）、5 第一方（pdoom 引擎）。每个自动出预览图并过确定性测试；`effects/CREDITS.md` 齐全。
 - **FX-03 MCP 与审阅室**：`effect_search / effect_get（含预览图）/ effect_apply / effect_update / effect_remove`；`effect_apply` 走版本检查并让目标进入待验证；前端在镜头/转场上显示动效栈（只读，可对单个动效提意见）。MCP-GUIDE 同步。

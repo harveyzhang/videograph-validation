@@ -91,3 +91,11 @@ test('casebook_search / casebook_read：检索 CoExp 与源码，按行读取；
   const sourceNoCases = await client.callTool({ name: 'casebook_search', arguments: { query: 'x', scope: 'source' } });
   assert.equal(sourceNoCases.isError, true);
 });
+
+test('提示词库工具经真实 MCP server 可调用（防模块语法/接线错误）', async () => {
+  const names = (await client.listTools()).tools.map((tool) => tool.name);
+  for (const name of ['fx_library_search', 'fx_library_read']) assert.ok(names.includes(name), name);
+  const result = await call('fx_library_search', { query: 'anything' });
+  assert.ok(Array.isArray(result.value.skipped));
+  assert.equal(result.texts[0], '（无命中）');
+});
