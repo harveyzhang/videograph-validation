@@ -1,6 +1,8 @@
 # 第三方来源与许可边界
 
 > 工程侧记录，不替代针对具体分发方式的法律审查。
+>
+> 本仓库自身代码与文档以 GPL-3.0-only 发布：根目录 [`LICENSE`](../LICENSE)，版权人 G1en-114，原链 <https://github.com/G1en-114/videograph-validation/>。下文均为第三方边界，不随本协议授权。
 
 ## ComfyUI：交互参考，未复制源码
 
