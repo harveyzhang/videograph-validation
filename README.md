@@ -54,6 +54,7 @@ npm run mcp           # MCP stdio 工具入口（供 Claude / GLM 等 LLM 连接
 
 - [ROADMAP.md](ROADMAP.md)：唯一计划与进度文档（当前阶段、已验收项目、未完成边界、多人并行协作规则）。
 - [docs/MCP-GUIDE.md](docs/MCP-GUIDE.md)：MCP 工具参考与标准创作流程。
+- **教 AI 用本工具的技能包**：[skills/shotcraft/](skills/shotcraft/SKILL.md)（分镜/转场/特效/媒介风格通用技法库，含 VideoGraph 平台篇）、[.agents/skills/videograph-create/](.agents/skills/videograph-create/SKILL.md)（从一首歌到成片的全流程操作手册，走 MCP 全引擎管线）、[.agents/skills/videograph-aigc-film/](.agents/skills/videograph-aigc-film/SKILL.md)（外部 AIGC 素材 + 本引擎合成的电影化短片流程）。三者经 MCP resources（`videograph://skills/...`）暴露给连接中的 LLM。
 - [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)：第三方来源与许可边界。
 - [docs/FX-AUTHORING.md](docs/FX-AUTHORING.md)：特效箱动效编写规范。
 - [HANDOFF.md](HANDOFF.md)：运行说明与历史交接；有冲突时以 ROADMAP 为准。
