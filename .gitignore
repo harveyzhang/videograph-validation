@@ -22,6 +22,8 @@ projects/
 # Local song files (not covered by the reference code license)
 /public/audio/*
 !/public/audio/.gitkeep
+/*.mp3
+/*.wav
 
 # Root-level generated audits and operator responses
 /*-audit.png
