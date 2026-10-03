@@ -1,6 +1,6 @@
-# VideoGraph - 队伍名（提交前改为你们的队名）
+# VideoGraph - 无止境
 
-<!-- 赛事要求：本文件第一行必须为「项目名称 - 队伍名」，提交前请替换上方队名占位 -->
+2026 xihack 大赛参赛项目 · 软件赛道。
 
 本仓库的全部示例影片由本工具自动生成，见 **[video/](video/)** 目录（点击 mp4 可直接在线播放）。
 
@@ -10,8 +10,8 @@
 | 拾愿长安 · 开篇宣传片 | 外部 AI 素材（生图→图生视频→配音）+ 本引擎合成的电影化短片 | 2′37″ / 21 镜 | [video/shiyuan-changan-pv.mp4](video/shiyuan-changan-pv.mp4) |
 | 西安 · 28 种艺术风格（长安三千年） | 一首歌遍历 28 种艺术风格的镜头合集 | 3′03″ / 30 镜 | [video/changan-art-styles.mp4](video/changan-art-styles.mp4) |
 | FX BOX 特效箱展示片 | 用特效箱 240+ 动效串成的 60 镜展示片 | 4′00″ / 60 镜 | [video/fxbox-showreel.mp4](video/fxbox-showreel.mp4) |
+| Sella 平台宣传片 · EN/FR 双语 | 商业宣传片：买菜 App 双语产品介绍 | 1′00″ / 14 镜 | [video/sella-promo-enfr.mp4](video/sella-promo-enfr.mp4) |
 | ORÉLIA 香水广告 15 秒 | 虚构品牌商业广告，含原创配乐 | 0′15″ / 6 镜 | [video/orelia-15s.mp4](video/orelia-15s.mp4) |
-| Sella 平台宣传片 · EN/FR 双语 | 商业宣传片（收尾中） | — | 制作中 |
 | VideoGraph 宣传片 20s / 60s | 用本工具为自身制作的宣传片 | 0′20″ + 1′00″ | [20s](video/videograph-promo-20s.mp4) / [60s](video/videograph-promo-60s.mp4) |
 
 以上影片的原始工程（1080p30 导出，含全部镜头源码、节奏与歌词方案）保存在本机 `projects/`，`video/` 为评审用压缩版。影片中的歌曲、歌词与字体权利归各自权利人，仅作演示；边界见 [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)。
