@@ -42,6 +42,18 @@ npm run mcp           # MCP stdio 工具入口（供 Claude / GLM 等 LLM 连接
 
 环境：Node.js 24（使用内置 `node:sqlite`）、本机 ffmpeg/ffprobe。先启动 service 再打开界面。让任意支持 MCP 的 LLM 连接 `npm run mcp`，从 `direct_video` prompt 或 `project_director_next` 开始建片；动效/案例/提示词库按需从上游下载，不随本仓库分发（`effects/sources.json`）。用户素材、数据库、服务令牌与导出文件保留在本机，不提交 Git。
 
+## 教模型怎么用：技能包（Skills）
+
+VideoGraph 的操作者是 LLM，技能包就是写给模型看的操作手册：每个技能由一份 `SKILL.md` 与若干参考文档组成（工具契约、制作规则、提示词模板、质检清单），内容是"接到什么任务 → 按什么步骤 → 调哪些 MCP 工具 → 拿什么证据自查"。模型连接 `npm run mcp` 后经 MCP resources（`videograph://skills/...`）按需读取，也可直接读仓库中的文件。
+
+| 技能 | 教模型做什么 | 什么时候用 |
+| --- | --- | --- |
+| [videograph-create](.agents/skills/videograph-create/SKILL.md) | 从一首本地音频新建工程到导出 MP4 的完整流程：歌曲分析 → 镜头规划 → 逐镜写场景 → 转场 → 审片（MCP 全引擎管线） | 「用这首歌做一支 PV」 |
+| [videograph-aigc-film](.agents/skills/videograph-aigc-film/SKILL.md) | 外部 AIGC 素材（生图 / 图生视频 / TTS）+ 本引擎合成电影化短片：定角色 → 关键帧 → 图生视频 → 配音 → 叠层合成 → 审片闭环 | 有分镜剧本与生图/生视频 API 时 |
+| [shotcraft](skills/shotcraft/SKILL.md) | 分镜 / 转场 / 特效 / 媒介风格通用技法库，含 VideoGraph 平台篇 | 设计镜头与视觉手法时按需加载 |
+
+给模型的启动指令只需一句话，例如：**「连接 videograph MCP，读取 videograph-create 技能，用这首歌做一支 PV」**；技能会引导模型先读 [docs/MCP-GUIDE.md](docs/MCP-GUIDE.md)（已实现工具的权威契约），再开始创作。
+
 ## 工作方式
 
 1. **建工程**：LLM 通过 MCP 上传任意音频 → 节拍/段落/歌词分析（词级对齐）→ 确认 → 镜头规划（服务端吸附拍点、不切词）。
@@ -54,7 +66,7 @@ npm run mcp           # MCP stdio 工具入口（供 Claude / GLM 等 LLM 连接
 
 - [ROADMAP.md](ROADMAP.md)：唯一计划与进度文档（当前阶段、已验收项目、未完成边界、多人并行协作规则）。
 - [docs/MCP-GUIDE.md](docs/MCP-GUIDE.md)：MCP 工具参考与标准创作流程。
-- **教 AI 用本工具的技能包**：[skills/shotcraft/](skills/shotcraft/SKILL.md)（分镜/转场/特效/媒介风格通用技法库，含 VideoGraph 平台篇）、[.agents/skills/videograph-create/](.agents/skills/videograph-create/SKILL.md)（从一首歌到成片的全流程操作手册，走 MCP 全引擎管线）、[.agents/skills/videograph-aigc-film/](.agents/skills/videograph-aigc-film/SKILL.md)（外部 AIGC 素材 + 本引擎合成的电影化短片流程）。三者经 MCP resources（`videograph://skills/...`）暴露给连接中的 LLM。
+- **教模型用本工具的技能包**（videograph-create / videograph-aigc-film / shotcraft）：见上文「教模型怎么用：技能包（Skills）」一节。
 - [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md)：第三方来源与许可边界。
 - [docs/FX-AUTHORING.md](docs/FX-AUTHORING.md)：特效箱动效编写规范。
 - [HANDOFF.md](HANDOFF.md)：运行说明与历史交接；有冲突时以 ROADMAP 为准。
