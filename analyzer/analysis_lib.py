@@ -248,6 +248,8 @@ def estimate_sections(y, sr=SR, downbeats=None, fps_hint=1.0):
     chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop, n_mfcc=12)
     features = np.vstack([chroma, mfcc / (np.abs(mfcc).max() + 1e-9)])
+    if features.shape[-1] < 2 * 8 + 1:  # 短音频（约 17 秒以下）不足以做 width=8 的自相似分析：整首一段
+        return [{"start": 0.0, "end": len(y) / sr, "label": "unknown", "confidence": 0.3}]
     S = librosa.segment.recurrence_matrix(features, width=8, mode="affinity", metric="cosine", sym=True)
     # 新颖度：沿主对角线的亲和度差分（棋盘核的稳定近似，无额外依赖）
     diag = np.array([S[i, i + 8] if i + 8 < S.shape[0] else 0.0 for i in range(S.shape[0] - 8)])

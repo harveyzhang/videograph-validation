@@ -43,7 +43,7 @@ projects/<uuid>/
 
 <!-- BEGIN:generated-from-MCP-GUIDE (scripts/skills/sync-platform.mjs 自动生成；勿手编) -->
 
-**工具速查（自动生成自 `docs/MCP-GUIDE.md` §3，toolset 2026-10-02；勿手编——更新请跑 `node scripts/skills/sync-platform.mjs`）**
+**工具速查（自动生成自 `docs/MCP-GUIDE.md` §3，toolset 2026-10-03；勿手编——更新请跑 `node scripts/skills/sync-platform.mjs`）**
 
 | 工具 | 参数 | 作用 |
 |---|---|---|

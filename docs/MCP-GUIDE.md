@@ -4,7 +4,7 @@
 > **维护规则：** 新增、删除、改名或改变任何 MCP 工具的参数/语义时，必须在同一提交中更新本文件（工具表 + 相关流程），并更新下方 `toolset` 版本行。`scripts/tests/docs/mcp-guide-sync.test.mjs`（SKILL-01 交付）会检查工具名与本文件一致。
 > 计划与进度不写在这里，见 [ROADMAP.md](../ROADMAP.md)。
 
-toolset: 2026-10-02 · server `videograph` 0.6.0 · 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评、案例库与上游来源）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
+toolset: 2026-10-03 · server `videograph` 0.6.1（新增 AIGC 短片 skill resources）· 状态：§3 为已实现工具（含意见与画面、歌曲分析/重试/修正与规划、节奏与画面感知、导演工作流和证据化自评、案例库与上游来源）；MCP resources 与 prompts 见 §3 末尾；导演闭环与恢复见 §4/§6。
 
 > **定位（2026-10-02）：VideoGraph 是 LLM 的 After Effects。** 你（agent）是操作者：建工程、规划、写镜头、调节奏、渲染与自查；人在前端看片、提意见、对比、采用/拒绝。改完不要只看“没有报错”——用 §3「节奏与画面感知」的工具看运动、量节奏、看全片。
 
@@ -155,6 +155,7 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 - `videograph://skills/shotcraft/SOURCES.md`（来源与许可）
 - `videograph://skills/videograph-create/SKILL.md`（仓库 `.agents/skills/videograph-create/SKILL.md`）
 - `videograph://skills/videograph-create/aesthetic-review.md`（仓库该 skill 的 `references/aesthetic-review.md`；URI 不含 references）
+- `videograph://skills/videograph-aigc-film/SKILL.md` 与 `videograph://skills/videograph-aigc-film/references/<name>.md`（仓库 `.agents/skills/videograph-aigc-film/`：外部生图/图生视频/TTS 素材 + VideoGraph 合成的 AIGC 电影化短片流程；脚本模板在该 skill 的 `scripts/`，不经 MCP 提供）
 
 **MCP prompts**：`direct_video({ projectId })`（必填工程 ID，读当前 creation skill，引导 next→claim→制作→真实证据→返工/交付；同一 agent 完成，不调用第二套模型）、`respond_to_feedback({ projectId? })`（§4 流程 + 自查要求）、`design_rhythm({ projectId, section? })`（节奏设计与自查流程）。读取 prompt 不是工程写入，也不替代 `project_director_next` 的当前事实与闸门。
 
@@ -172,6 +173,8 @@ MCP server 只是工程服务的本机客户端：所有 `project_*` 工具经 H
 | `project_shot_effects` | `projectId, shotId, expectedInputRevision, effects` | 设置镜头后期栈：`[{ id, params?, bindings? }]`，按顺序叠加、最多 4 层、空数组清除；只接受 kind=post。`bindings` 覆盖节拍绑定：`{ 参数: { to: beat\|kick\|bar\|energy, amount } }`（`null` 取消）。镜头转为待验证，导演工程需带 `attemptToken`。套用后用 `project_stills` / `project_filmstrip` 看真实画面、`project_rhythm_report` 看节奏 |
 
 转场动效：`project_transition_configure` 的 `config` 用 `mode: "effect"` + `effectId`（如 `gl-directionalwarp`）+ 可选 `params` 与 `duration`。
+
+无鼓点段落要在某一帧做冲击（弹窗、按钮、落版）时用 `timed-impact`（参数 `atTime` = 歌曲秒，`centerX/centerY` 冲击点，Y 从画面底部算），它不依赖节拍事件。
 
 **选用原则**：一部片的后期风格要统一（同一段落用同一种媒介），节拍冲击类（拍点推镜/震动/RGB 分离）只放在副歌与重音段；不要每个镜头叠满 4 层；转场大多数仍应是节拍硬切，动效转场留给段落交界。
 

@@ -22,7 +22,7 @@ import { fxToolDefinitions, fxToolNames, callFxTool } from '../server/mcp-fx-too
 
 const productRoot = fileURLToPath(new URL('../..', import.meta.url));
 const server = new Server(
-  { name: 'videograph', version: '0.6.0' },
+  { name: 'videograph', version: '0.6.1' },
   { capabilities: { tools: {}, resources: {}, prompts: {} } },
 );
 
@@ -60,6 +60,11 @@ function resourceList() {
     { uri: 'videograph://skills/videograph-create/aesthetic-review.md', name: 'AI 导演创作与审片准则', file: '.agents/skills/videograph-create/references/aesthetic-review.md' }];
   for (const file of readdirSync(join(productRoot, 'skills/shotcraft/references')).filter((name) => name.endsWith('.md')).sort()) {
     entries.push({ uri: `videograph://skills/shotcraft/references/${file}`, name: `shotcraft · ${file.replace(/\.md$/, '')}`, file: `skills/shotcraft/references/${file}` });
+  }
+  // AIGC 电影化短片（外部生图/生视频 + VideoGraph 合成）
+  entries.push({ uri: 'videograph://skills/videograph-aigc-film/SKILL.md', name: 'AIGC 电影化短片制作流程', file: '.agents/skills/videograph-aigc-film/SKILL.md' });
+  for (const file of readdirSync(join(productRoot, '.agents/skills/videograph-aigc-film/references')).filter((name) => name.endsWith('.md')).sort()) {
+    entries.push({ uri: `videograph://skills/videograph-aigc-film/references/${file}`, name: `AIGC 短片 · ${file.replace(/\.md$/, '')}`, file: `.agents/skills/videograph-aigc-film/references/${file}` });
   }
   return entries;
 }
