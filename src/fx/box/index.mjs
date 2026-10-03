@@ -5,7 +5,7 @@
 export const BOX_VERSION = '2026-10-02';
 export const PARAM_TYPES = ['float', 'int', 'bool', 'vec2', 'vec3', 'vec4', 'ivec2', 'color'];
 export const BINDING_SOURCES = ['beat', 'kick', 'bar', 'energy'];
-export const CATEGORIES = ['印刷与版画', '手绘与绘画', '复古与数字', '胶片与调色', '运动与节拍', '光效与粒子', '几何与图形', '文字与排版', '生成层', '转场'];
+export const CATEGORIES = ['印刷与版画', '手绘与绘画', '复古与数字', '胶片与调色', '运动与节拍', '光效与粒子', '几何与图形', '文字与排版', '生成层', '镜头与扭曲', '画面版式', '转场'];
 
 /** 解析一个动效文件；格式错误抛出带文件名的错误。 */
 export function parseEffectFile(text, fileName = '') {

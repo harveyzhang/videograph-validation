@@ -16,6 +16,7 @@
     "colorA": { "type": "color", "default": "#ff4d12", "label": "光芒色 A" },
     "colorB": { "type": "color", "default": "#ffb36b", "label": "光芒色 B" },
     "behind": { "type": "float", "default": 0.35, "min": 0, "max": 1, "label": "背景判定亮度（低于它的地方显示光芒）" },
+    "lightBackground": { "type": "bool", "default": false, "label": "浅色背景（主体是深色剪影时打开：光芒画在亮部）" },
     "pulse": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "节拍脉动（通常由节拍驱动）" }
   },
   "bindings": { "pulse": { "to": "beat", "amount": 0.6 } },
@@ -46,7 +47,8 @@ vec4 effect(vec2 uv) {
   burst *= mix(1.15, .55, smoothstep(0., .9 - pulse * .15, r)) * (1. + pulse * .25 * exp(-r * 3.));
 
   // ③ 只在暗部显示：背景遮罩 = 原画面亮度低于 behind 的区域（柔和过渡），主体保持原样。
-  float bg = smoothstep(behind + .1, behind - .1, fxLuma(src));
+  float l = fxLuma(src);
+  float bg = lightBackground ? smoothstep(1. - behind - .1, 1. - behind + .1, l) : smoothstep(behind + .1, behind - .1, l);
   vec3 c = mix(src, burst, bg);
   return vec4(c, 1.);
 }

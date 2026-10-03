@@ -9,7 +9,7 @@
   "when": "旅行、车站/机场、复古科技、倒计时、数据或名单公布；文字与图形都适用。",
   "avoid": "需要连续观看细节的镜头（牌缝会切开画面）；牌子太小时翻页动作看不清。",
   "params": {
-    "tile": { "type": "float", "default": 0.07, "min": 0.015, "max": 0.3, "label": "牌子宽度（画面高度比例）" },
+    "tile": { "type": "float", "default": 0.1, "min": 0.015, "max": 0.3, "label": "牌子宽度（画面高度比例）" },
     "inEnd": { "type": "float", "default": 0.45, "min": 0.05, "max": 0.8, "label": "全部翻完于镜头进度" },
     "flipTime": { "type": "float", "default": 0.06, "min": 0.01, "max": 0.2, "label": "单块翻页时长（镜头进度）" },
     "shuffle": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "鼓点重翻比例（通常由节拍驱动）" },
@@ -47,7 +47,7 @@ vec4 effect(vec2 uv) {
   vec2 q = (f - vec2(.22, .14)) / vec2(.56, .72);
   float bit = 0.;
   if (q.x >= 0. && q.x < 1. && q.y >= 0. && q.y < 1.) bit = step(.5, fxHash(id * 3.1 + floor(q * vec2(3., 5.)) * 1.9 + floor(uTime * 12.)));
-  vec3 oldFace = mix(panel, glyph, bit * .9);
+  vec3 oldFace = mix(panel, glyph, bit * .55);   // 旧牌面的字块偏暗，翻到真实画面时才“亮”起来
   vec3 newFace = srcTex(cuv).rgb;
 
   // ④ 翻页几何：前半程上半片绕中轴压扁（显示旧面，越来越窄且变暗），后半程新的上半片展开；下半片在半程时被新面盖住。

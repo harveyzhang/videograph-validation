@@ -10,9 +10,9 @@
   "avoid": "白天强光画面（光点看不见）；快节奏动作段落。",
   "params": {
     "count": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "数量" },
-    "size": { "type": "float", "default": 0.006, "min": 0.002, "max": 0.02, "label": "光点大小（画面高度比例）" },
+    "size": { "type": "float", "default": 0.008, "min": 0.002, "max": 0.02, "label": "光点大小（画面高度比例）" },
     "height": { "type": "float", "default": 0.65, "min": 0.1, "max": 1, "label": "分布高度（从底部算）" },
-    "glow": { "type": "float", "default": 1, "min": 0, "max": 2, "label": "亮度" },
+    "glow": { "type": "float", "default": 1.8, "min": 0, "max": 3, "label": "亮度" },
     "sync": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "随拍同步亮起（通常由节拍驱动）" },
     "color": { "type": "color", "default": "#ffd76a", "label": "光色" }
   },
@@ -54,7 +54,7 @@ vec4 effect(vec2 uv) {
 
       // ③ 光点 + 光晕：核心很小、光晕 6 倍大。
       float d = length((g - ctr) * cs);
-      float core = smoothstep(size, size * .3, d);
+      float core = smoothstep(max(size, 1.5 / uRes.y), size * .3, d);   // 核心至少约 1.5 像素
       float halo = exp(-d / (size * 6.)) * .35;
       light += (core + halo) * blink * inRange;
     }

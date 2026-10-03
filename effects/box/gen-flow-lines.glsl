@@ -10,9 +10,9 @@
   "avoid": "需要干净背景的文字/产品特写（可调低 opacity）；写实纪录风格。",
   "params": {
     "scale": { "type": "float", "default": 2.2, "min": 0.5, "max": 8, "label": "流场尺度" },
-    "lines": { "type": "float", "default": 60, "min": 10, "max": 200, "label": "光丝密度" },
+    "lines": { "type": "float", "default": 36, "min": 10, "max": 200, "label": "光丝密度" },
     "flow": { "type": "float", "default": 0.3, "min": 0, "max": 2, "label": "流速（通常由节拍驱动）" },
-    "opacity": { "type": "float", "default": 0.7, "min": 0, "max": 1, "label": "光丝强度" },
+    "opacity": { "type": "float", "default": 0.55, "min": 0, "max": 1, "label": "光丝强度" },
     "useSource": { "type": "float", "default": 0.7, "min": 0, "max": 1, "label": "取原画面颜色（0 = 用光丝色）" },
     "lineColor": { "type": "color", "default": "#8fd3ff", "label": "光丝色" }
   },
@@ -51,11 +51,12 @@ vec4 effect(vec2 uv) {
 
   // ② 一条丝的亮度：横向是细线（宽约 25% 车道），纵向是沿流动方向滑动的亮段（像光在丝上流过）。
   //    flow 挂鼓点：鼓点那一下光段滑得更快。
-  float w = smoothstep(.5, .2, abs(fract(across) - .5)) - .3;
+  float lw = max(fwidth(across) * 1.2, .06);              // 线宽：约 1 像素，且至少车道的 6%
+  float w = smoothstep(lw, 0., abs(fract(across) - .5));
   float along = dot(q, dir) * 6. + uTime * flow * 2. + fxHash(vec2(lane, 3.)) * 10.;
   float seg = smoothstep(.0, .3, fract(along)) * smoothstep(1., .5, fract(along));
-  float on = step(.35, fxHash(vec2(lane, 9.)));
-  float line = max(w, 0.) * 1.4 * seg * on;
+  float on = step(.55, fxHash(vec2(lane, 9.)));          // 只有一部分车道有丝（留出呼吸）
+  float line = w * seg * on;
 
   // ③ 颜色：取原画面颜色（提亮）或固定光丝色；加光叠加。
   vec3 lc = mix(lineColor, clamp(src * 1.6 + .1, 0., 1.), useSource);

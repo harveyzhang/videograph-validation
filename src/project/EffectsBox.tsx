@@ -17,7 +17,7 @@ function useThumbnails(effects: FxEffect[]) {
     let previewer: EffectPreviewer;
     try { previewer = new EffectPreviewer(canvas); } catch { return; }
     const queue = effects.filter((effect) => !thumbs[effect.id]);
-    const source = (effect: FxEffect) => effect.kind === 'transition' ? 'type' : ({ '手绘与绘画': 'scene', '印刷与版画': 'portrait', '胶片与调色': 'scene', '复古与数字': 'shapes', '生成层': 'scene' } as Record<string, string>)[effect.category ?? ''] ?? 'type';
+    const source = (effect: FxEffect) => effect.kind === 'transition' ? 'type' : ({ '手绘与绘画': 'scene', '印刷与版画': 'portrait', '胶片与调色': 'scene', '复古与数字': 'shapes', '生成层': 'scene', '镜头与扭曲': 'scene', '画面版式': 'portrait' } as Record<string, string>)[effect.category ?? ''] ?? 'type';
     const step = () => {
       if (cancelled) return;
       const batch: Record<string, string> = {};

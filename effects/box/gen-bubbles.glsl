@@ -9,7 +9,7 @@
   "when": "水下与海洋、汽水/啤酒/饮料广告、清新夏日、梦幻与童趣、护肤品。",
   "avoid": "干燥/火焰/沙漠题材；需要稳定观看文字的镜头。",
   "params": {
-    "density": { "type": "float", "default": 0.45, "min": 0, "max": 1, "label": "气泡数量" },
+    "density": { "type": "float", "default": 0.28, "min": 0, "max": 1, "label": "气泡数量" },
     "size": { "type": "float", "default": 0.035, "min": 0.008, "max": 0.12, "label": "气泡大小（画面高度比例）" },
     "rise": { "type": "float", "default": 0.12, "min": 0.02, "max": 0.5, "label": "上升速度" },
     "lens": { "type": "float", "default": 0.35, "min": 0, "max": 1, "label": "折射放大" },

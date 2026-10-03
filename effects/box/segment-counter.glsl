@@ -13,9 +13,9 @@
     "fromValue": { "type": "float", "default": 0, "min": 0, "max": 999999, "label": "起始值（模式 2）" },
     "toValue": { "type": "float", "default": 2026, "min": 0, "max": 999999, "label": "目标值（模式 2）" },
     "countEnd": { "type": "float", "default": 0.6, "min": 0.05, "max": 1, "label": "滚动完成于镜头进度（模式 2）" },
-    "digitH": { "type": "float", "default": 0.16, "min": 0.03, "max": 0.6, "label": "数字高度（画面高度比例）" },
+    "digitH": { "type": "float", "default": 0.2, "min": 0.03, "max": 0.6, "label": "数字高度（画面高度比例）" },
     "posX": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "中心 X" },
-    "posY": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "中心 Y（下 0 上 1）" },
+    "posY": { "type": "float", "default": 0.22, "min": 0, "max": 1, "label": "中心 Y（下 0 上 1）" },
     "flash": { "type": "float", "default": 0.15, "min": 0, "max": 1, "label": "鼓点增亮（通常由节拍驱动）" },
     "color": { "type": "color", "default": "#ff4d12", "label": "段码颜色" },
     "panel": { "type": "float", "default": 0.55, "min": 0, "max": 1, "label": "背板不透明度" }

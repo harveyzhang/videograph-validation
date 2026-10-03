@@ -16,7 +16,7 @@ let effects = loadBoxEffects().effects;
 if (args.includes('--include-gl')) effects = effects.concat((await loadGlTransitions()).effects.filter((effect) => !effect.unsupported));
 if (only) effects = effects.filter((effect) => only.has(effect.id));
 // 每类动效用最能看出效果的演示素材
-const sourceFor = (effect) => forcedSource ?? ({ '手绘与绘画': 'scene', '印刷与版画': 'portrait', '胶片与调色': 'scene', '复古与数字': 'shapes', '运动与节拍': 'type', '生成层': 'scene', '文字与排版': 'type' }[effect.category] ?? 'type');
+const sourceFor = (effect) => forcedSource ?? ({ '手绘与绘画': 'scene', '印刷与版画': 'portrait', '胶片与调色': 'scene', '复古与数字': 'shapes', '运动与节拍': 'type', '生成层': 'scene', '文字与排版': 'type', '镜头与扭曲': 'scene', '画面版式': 'portrait' }[effect.category] ?? 'type');
 
 await withFxBrowser(async (page) => {
   for (const effect of effects) {

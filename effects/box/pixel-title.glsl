@@ -11,9 +11,9 @@
   "params": {
     "chars1": { "type": "vec4", "default": [6, 24, 0, 2], "label": "字符 1–4（编码：0 空格，1–26 = A–Z，27–36 = 数字 0–9，37 - 38 ! 39 . 40 ? 41 : 42 +）" },
     "chars2": { "type": "vec4", "default": [15, 24, 38, 0], "label": "字符 5–8（同上编码；默认拼出 FX BOX!）" },
-    "dotSize": { "type": "float", "default": 0.022, "min": 0.004, "max": 0.08, "label": "点大小（画面高度比例）" },
+    "dotSize": { "type": "float", "default": 0.034, "min": 0.004, "max": 0.08, "label": "点大小（画面高度比例）" },
     "posX": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "中心 X" },
-    "posY": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "中心 Y（下 0 上 1）" },
+    "posY": { "type": "float", "default": 0.24, "min": 0, "max": 1, "label": "中心 Y（下 0 上 1）" },
     "inEnd": { "type": "float", "default": 0.3, "min": 0.02, "max": 0.8, "label": "入场完成于镜头进度" },
     "outStart": { "type": "float", "default": 0.9, "min": 0.4, "max": 1, "label": "出场开始（1 = 不出场）" },
     "hop": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "鼓点跳动（通常由节拍驱动）" },

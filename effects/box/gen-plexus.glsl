@@ -9,12 +9,12 @@
   "when": "科技/互联网/AI/区块链/社交网络主题、数据可视化开场、企业宣传片的背景纹理。",
   "avoid": "温暖手作/自然题材；画面本身已经很复杂时（网络会让画面更乱）。",
   "params": {
-    "density": { "type": "float", "default": 9, "min": 3, "max": 25, "label": "节点密度（每屏高格数）" },
+    "density": { "type": "float", "default": 7, "min": 3, "max": 25, "label": "节点密度（每屏高格数）" },
     "reach": { "type": "float", "default": 1.1, "min": 0.4, "max": 1.6, "label": "连线距离（格）" },
     "drift": { "type": "float", "default": 0.25, "min": 0, "max": 1.5, "label": "漂移速度" },
     "pulse": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "鼓点脉冲（通常由节拍驱动）" },
     "color": { "type": "color", "default": "#5fd0ff", "label": "颜色" },
-    "dim": { "type": "float", "default": 0.2, "min": 0, "max": 0.8, "label": "原画面压暗" }
+    "dim": { "type": "float", "default": 0.1, "min": 0, "max": 0.8, "label": "原画面压暗" }
   },
   "bindings": { "pulse": { "to": "kick", "amount": 0.8 } },
   "inspiredBy": [{ "source": "videos-casebook", "ref": "techniques：节点网络背景", "note": "按思路自写" }],
@@ -58,15 +58,16 @@ vec4 effect(vec2 uv) {
       float L = length(pts[a] - pts[b]);
       if (L > R) continue;
       float d = segDist(g, pts[a], pts[b]);
-      lines += smoothstep(px * 1.6, 0., d) * (1. - L / R) * .8;
+      lines += smoothstep(max(px * 1.8, .014), 0., d) * (1. - L / R);
     }
     // ③ 节点：小亮点 + 光晕，鼓点时更亮
     float dn = length(g - pts[a]);
-    dots += smoothstep(px * 4., px, dn) + exp(-dn / (px * 10.)) * .25 * (1. + pulse);
+    float dr = max(px * 2.5, .03);                      // 点半径：约 2.5 像素，低分辨率下不小于 0.03 格
+    dots += smoothstep(dr, dr * .3, dn) + exp(-dn / .06) * .12 * (1. + pulse);
   }
 
   // ④ 合成：原画面略压暗，网络加光叠加。
   vec3 c = src * (1. - dim);
-  c = 1. - (1. - c) * (1. - clamp(color * (min(lines, 1.2) * .7 + dots * .9), 0., 1.));
+  c = 1. - (1. - c) * (1. - clamp(color * (min(lines, 1.2) * .85 + dots * .9), 0., 1.));
   return vec4(c, 1.);
 }
