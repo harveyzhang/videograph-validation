@@ -68,7 +68,8 @@ def stage_t1(spec, out_dir):
     y = lib.load_mono(t0["wav"])
     envelopes, fps, _ = lib.compute_envelopes(y)
     onsets = lib.percussion_onsets(y)
-    device = "cuda" if spec.get("gpu", True) else "cpu"
+    # gpu=True 时交给 analysis_lib 自动选择（有 CUDA 用 CUDA，否则 CPU）；直接传 "cuda" 会在无 CUDA 的机器上让 beat_this 回退到 librosa
+    device = None if spec.get("gpu", True) else "cpu"
     beats, downbeats, bpm, method, confidence = lib.estimate_beats(y, audio_path=t0["wav"], device=device)
     sections = lib.estimate_sections(y, downbeats=downbeats)
     t1 = {
