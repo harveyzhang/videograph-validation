@@ -50,6 +50,9 @@ async function renderSegment(page, shot, output, fps, samples, doneFrames, total
   encoder.stdin.on('error', (error) => { failure = error; });
   encoder.on('error', (error) => { failure = error; });
   const encoderExit = new Promise((resolve) => encoder.on('close', (code) => resolve(code)));
+  // ffmpeg 阻塞在读 stdin 时会忽略 SIGTERM：先关闭 stdin 让它读到 EOF，再 SIGKILL 兜底，保证取消/失败后编码器一定退出
+  // （否则编码器与管道会把渲染进程挂住，服务的任务队列随之卡死）。半成品写在临时文件里，不会进入分段缓存。
+  const stopEncoder = () => { encoder.stdin.destroy(); if (encoder.exitCode === null && encoder.signalCode === null) encoder.kill('SIGKILL'); };
   const token = randomUUID();
   const socket = new WebSocketServer({ host: '127.0.0.1', port: 0, maxPayload: width * height * 4 + 1024,
     verifyClient: ({ req, origin }) => req.url === `/${token}` && origin === server.url });
@@ -65,10 +68,10 @@ async function renderSegment(page, shot, output, fps, samples, doneFrames, total
         received++;
         ws.send(String(received));
         progress(`渲染 ${shot.title} · ${received}/${count} 帧`, (doneFrames + received) / totalFrames);
-      }).catch((error) => { failure = error; ws.terminate(); encoder.kill(); void page.close(); });
+      }).catch((error) => { failure = error; ws.terminate(); stopEncoder(); void page.close(); });
     });
   });
-  const cancel = () => { for (const ws of socket.clients) ws.terminate(); encoder.kill(); void page.close(); };
+  const cancel = () => { for (const ws of socket.clients) ws.terminate(); stopEncoder(); void page.close(); };
   signal.addEventListener('abort', cancel, { once: true });
   try {
     await page.evaluate((options) => window.__pdoom.stream(options), { from: first / fps, to: last / fps, fps, samples, shutter: 0.2, inflight: 2, ws: `ws://127.0.0.1:${socket.address().port}/${token}` });
@@ -88,7 +91,7 @@ async function renderSegment(page, shot, output, fps, samples, doneFrames, total
     signal.removeEventListener('abort', cancel);
     for (const ws of socket.clients) ws.terminate();
     await new Promise((resolve) => socket.close(resolve));
-    if (encoder.exitCode === null) encoder.kill();
+    if (encoder.exitCode === null) stopEncoder();
   }
 }
 
