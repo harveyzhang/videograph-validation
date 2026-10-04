@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 const runtimePath = fileURLToPath(new URL('../../fx/runtime.mjs', import.meta.url));
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000"><script type="module">
 import * as fx from '/runtime.mjs'; window.__fx = fx; window.__fxReady = true;
+import { browserPath, angleArgs } from '../browser.mjs';
 </script></body>`;
 
 export async function withFxBrowser(work) {
@@ -16,7 +17,7 @@ export async function withFxBrowser(work) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(PAGE);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: [process.platform === 'darwin' ? '--use-angle=metal' : '--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist'] });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);

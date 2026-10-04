@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { startReferenceServer } from '../src/server/reference-server.mjs';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 
 const server = await startReferenceServer();
-const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
+const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   const errors = [];

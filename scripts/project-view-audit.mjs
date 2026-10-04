@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
 import { fileURLToPath } from 'node:url';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 
 const projectId = process.argv[2];
 if (!projectId) throw new Error('usage: node scripts/project-view-audit.mjs <projectId>');
-const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--autoplay-policy=no-user-gesture-required', '--use-angle=d3d11'] });
+const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: ['--autoplay-policy=no-user-gesture-required', ...angleArgs()] });
 try {
   const page = await browser.newPage({ viewport: { width: 1680, height: 1000 } });
   const errors = [];

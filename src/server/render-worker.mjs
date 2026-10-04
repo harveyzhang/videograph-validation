@@ -11,6 +11,7 @@ import { projectDir, readJob, saveJob, mutateProject, sha256, productRoot } from
 import { normalizeProject, transitionPair, transitionWindow, transitionConfig } from './transitions.mjs';
 import { analyzeRhythm, beatLabel, motionSeries, RHYTHM_VERSION } from './rhythm.mjs';
 import { pageSample, pageComposeGrid, pageDrawChart } from './ae-page.mjs';
+import { browserPath, angleArgs } from './browser.mjs';
 
 const [projectId, jobId] = process.argv.slice(2);
 const job = readJob(projectId, jobId);
@@ -142,8 +143,8 @@ try {
     } else shots = shots.map((shot) => shot.id === target.id ? { ...shot, ...structuredClone(target.reviewBaseline) } : shot);
   }
   server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions, fps, audioFile: frozen.audio.engineFile });
-  browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    args: [process.platform === 'darwin' ? '--use-angle=metal' : '--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
+  browser = await chromium.launch({ headless: true, executablePath: browserPath(),
+    args: [...angleArgs(), '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
   signal.addEventListener('abort', () => { void browser?.close(); }, { once: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   let browserErrors = [];
