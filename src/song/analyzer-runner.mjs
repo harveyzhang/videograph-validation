@@ -14,6 +14,8 @@ export const analyzerPython = () => process.env.VIDEOGRAPH_ANALYZER_PYTHON ?? 'D
 /** T3（qwen-asr）需要 py3.12：机器上存在 videograph-t3 环境时优先用它，否则回退主解释器（analyzer/environment.md 双环境说明）。 */
 const T3_PYTHON_DEFAULT = 'D:/Users/Martis/anaconda3/envs/videograph-t3/python.exe';
 export const analyzerT3Python = () => process.env.VIDEOGRAPH_ANALYZER_T3_PYTHON ?? (existsSync(T3_PYTHON_DEFAULT) ? T3_PYTHON_DEFAULT : analyzerPython());
+/** 模型权重根目录：VIDEOGRAPH_MODELS_DIR，默认与仓库同级的 .models（作者机即 F:/aicg/.models，行为不变）。 */
+export const modelsRoot = () => resolve(process.env.VIDEOGRAPH_MODELS_DIR ?? join(productRoot, '..', '.models'));
 export const analysisCacheRoot = () => resolve(process.env.VIDEOGRAPH_SONG_CACHE ?? join(productRoot, '.cache', 'song-analysis'));
 
 /** 缓存键（规范化输入 + 版本）：改分析参数或分析器版本即失效。 */
@@ -83,10 +85,11 @@ function runPython(python, args, onProgress) {
   return new Promise((resolvePromise, reject) => {
     // 模型权重以 local_dir 模式落盘（绕开 Windows 符号链接特权）；未显式配置时给默认路径。
     const env = { ...process.env };
-    env.VIDEOGRAPH_QWEN_ALIGNER_DIR ??= 'F:/aicg/.models/local/qwen3-forced-aligner-0.6b';
-    env.VIDEOGRAPH_QWEN_ASR_DIR ??= 'F:/aicg/.models/local/qwen3-asr-1.7b';
-    env.HF_HOME ??= 'F:/aicg/.models';
-    env.TORCH_HOME ??= 'F:/aicg/.models'; // beat_this 权重走 torch.hub 缓存（TORCH_HOME/checkpoints）
+    const models = modelsRoot();
+    env.VIDEOGRAPH_QWEN_ALIGNER_DIR ??= join(models, 'local', 'qwen3-forced-aligner-0.6b');
+    env.VIDEOGRAPH_QWEN_ASR_DIR ??= join(models, 'local', 'qwen3-asr-1.7b');
+    env.HF_HOME ??= models;
+    env.TORCH_HOME ??= models; // beat_this 权重走 torch.hub 缓存（TORCH_HOME/checkpoints）
     const child = spawn(python, args, { windowsHide: true, env });
     const lines = [];
     let buffer = '';

@@ -64,7 +64,9 @@ def main():
     else:
         for model in MODELS:
             report["models"][model] = False
-    for drive in ("C:\\", "D:\\", "F:\\"):
+    # Windows 按盘符；其他平台检查模型缓存所在磁盘（未配置时为仓库同级目录）
+    targets = ("C:\\", "D:\\", "F:\\") if os.name == "nt" else (cache_root or str(Path(__file__).resolve().parents[2]),)
+    for drive in targets:
         try:
             usage = shutil.disk_usage(drive)
             report["disk"][drive] = {"freeGB": round(usage.free / 2**30, 1), "totalGB": round(usage.total / 2**30, 1)}
