@@ -16,7 +16,7 @@ export async function withFxBrowser(work) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(PAGE);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: [process.platform === 'darwin' ? '--use-angle=metal' : '--use-angle=d3d11', '--ignore-gpu-blocklist'] });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);

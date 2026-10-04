@@ -140,7 +140,7 @@ try {
   }
   server = await startReferenceServer({ root: join(dir, 'engine'), shots, transitions, fps, audioFile: frozen.audio.engineFile });
   browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-    args: ['--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
+    args: [process.platform === 'darwin' ? '--use-angle=metal' : '--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling'] });
   signal.addEventListener('abort', () => { void browser?.close(); }, { once: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   let browserErrors = [];
