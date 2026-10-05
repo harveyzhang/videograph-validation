@@ -5,6 +5,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { chromium } from 'playwright-core';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const studio = process.env.AUDIT_STUDIO_URL ?? 'http://127.0.0.1:5288';
 if (!process.env.VIDEOGRAPH_SERVICE_URL || !process.env.VIDEOGRAPH_SERVICE_TOKEN_FILE) throw new Error('必须显式选择独立验证服务和令牌文件');
@@ -20,7 +21,6 @@ async function invoke(name, args, expectError = false) {
 }
 const colorScene = (r, g, b) => `import { Scene } from '../engine/scene';
 import { FSPass } from '../engine/gl';
-import { browserPath, angleArgs } from '../src/server/browser.mjs';
 export default class TestScene extends Scene {
  pass = new FSPass('void main(){fragColor=vec4(${r},${g},${b},1.);}');
  render(f,out){this.pass.render(this.ctx.renderer,out);return {bloom:0,halation:0,grain:0,ca:0,vignette:0,hud:0,frame:0,pdoom:0};}

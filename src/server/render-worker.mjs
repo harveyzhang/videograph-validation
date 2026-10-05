@@ -51,7 +51,7 @@ async function renderSegment(page, shot, output, fps, samples, doneFrames, total
   encoder.stdin.on('error', (error) => { failure = error; });
   encoder.on('error', (error) => { failure = error; });
   const encoderExit = new Promise((resolve) => encoder.on('close', (code) => resolve(code)));
-  // ffmpeg 阻塞在读 stdin 时会忽略 SIGTERM：先关闭 stdin 让它读到 EOF，再 SIGKILL 兜底，保证取消/失败后编码器一定退出
+  // ffmpeg 阻塞在读 stdin 时会忽略 SIGTERM：关闭 stdin 并直接 SIGKILL，保证取消/失败后编码器一定退出
   // （否则编码器与管道会把渲染进程挂住，服务的任务队列随之卡死）。半成品写在临时文件里，不会进入分段缓存。
   const stopEncoder = () => { encoder.stdin.destroy(); if (encoder.exitCode === null && encoder.signalCode === null) encoder.kill('SIGKILL'); };
   const token = randomUUID();

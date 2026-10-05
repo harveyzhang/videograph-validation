@@ -4,11 +4,11 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { browserPath, angleArgs } from '../browser.mjs';
 
 const runtimePath = fileURLToPath(new URL('../../fx/runtime.mjs', import.meta.url));
 const PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000"><script type="module">
 import * as fx from '/runtime.mjs'; window.__fx = fx; window.__fxReady = true;
-import { browserPath, angleArgs } from '../browser.mjs';
 </script></body>`;
 
 export async function withFxBrowser(work) {
@@ -17,14 +17,15 @@ export async function withFxBrowser(work) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(PAGE);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist'] });
+  let browser;
   try {
+    browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist'] });
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(() => window.__fxReady === true, null, { timeout: 30000 });
     return await work(page);
   } finally {
-    await browser.close();
+    await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   }
 }

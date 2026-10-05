@@ -1,5 +1,5 @@
 # download_models.py — SONG-01 模型预下载（用户批准后由 install 流程执行）。
-# 缓存根目录：HF_HOME > VIDEOGRAPH_MODELS_DIR > 仓库同级的 .models（作者机即 F:\aicg\.models）；逐项打印体积再下载，NC 模型绝不出现。
+# 缓存根目录与 analyzer-runner.mjs 的 modelsRoot() 一致：VIDEOGRAPH_MODELS_DIR > 仓库同级的 .models（作者机即 F:\aicg\.models）；逐项打印体积再下载，NC 模型绝不出现。
 import argparse
 import json
 import os
@@ -20,7 +20,7 @@ def main():
     args = parser.parse_args()
     wanted = args.only.split(",") if args.only else [m["name"] for m in MODELS]
     plan = [m for m in MODELS if m["name"] in wanted]
-    root = Path(os.environ.get("HF_HOME") or os.environ.get("VIDEOGRAPH_MODELS_DIR") or Path(__file__).resolve().parents[2] / ".models")
+    root = Path(os.environ.get("VIDEOGRAPH_MODELS_DIR") or Path(__file__).resolve().parents[2] / ".models")
     print(json.dumps({"plan": [m["name"] for m in plan], "cacheRoot": str(root), "dryRun": args.dry_run}, ensure_ascii=False))
     if args.dry_run:
         return
