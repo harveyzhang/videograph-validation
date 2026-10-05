@@ -25,7 +25,7 @@ VideoGraph 是面向产品宣发与音乐人 PV 的本地 AI 视频工程工作�
 **已验证的关键数字**（出处与核对记录见 [ROADMAP.md](ROADMAP.md)）：
 
 - **50+ 个 MCP 工具**（server `videograph`，工具表见 [docs/MCP-GUIDE.md](docs/MCP-GUIDE.md)，有文档同步测试保证不过期）。
-- **特效箱 330 个动效**：205 个本项目原创 GLSL（`effects/box/`，逐文件记录 provenance）+ gl-transitions 125 个转场。
+- **特效箱 370 个动效**：245 个本项目原创 GLSL（`effects/box/`，逐文件记录 provenance）+ gl-transitions 125 个转场。
 - **AI 导演闭环实跑两轮**（《THE LAST AUDIT》）：方案 → 下一步 → 租约/回执 → 证据化自评 → 人工接受。
 - **22/22 分段缓存命中**（P(doom) 参考工程 22 镜 1080p 全片重导出）；宣传片 4 倍采样全片导出 6′17″ / 2′14″（本机实测）。
 - **节奏报告**对参考片校准，宣传片实测节拍命中率 79% / 89% / 100%。

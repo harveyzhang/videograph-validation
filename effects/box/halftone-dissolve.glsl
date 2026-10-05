@@ -33,7 +33,7 @@ vec4 transition(vec2 uv) {
   // ② 网点半径：随进度增长，并沿对角线方向错开（扫描前沿）
   float diag = (uv.x + (1. - uv.y)) * .5;
   float local = clamp(progress * (1. + sweep) - diag * sweep, 0., 1.);
-  float r = local * .75;                                  // 0.707 时网点刚好连成片
+  float r = local * .85;                                  // 0.707 时网点刚好连成片
   // ③ 油墨颗粒：边缘不完全圆
   float grain = (fxNoise(uv * uRes * .4) - .5) * .06;
   float m = smoothstep(r + .02, r - .02, d + grain);

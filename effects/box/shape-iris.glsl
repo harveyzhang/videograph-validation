@@ -58,14 +58,16 @@ vec4 transition(vec2 uv) {
   if (closeFirst) { showNew = pr > .5; float t = showNew ? (pr - .5) * 2. : 1. - pr * 2.; R = pow(t, 1.5) * maxR; }
   else { showNew = true; R = pow(pr, 1.6) * maxR; }
   // ② 旋转的图形距离场（按半径缩放）
-  vec2 q = fxRot(spin * pr) * p / max(R, 1e-4);
+  if (R < .001) return vec4(closeFirst && showNew ? vec3(0.) : (closeFirst ? vec3(0.) : a), 1.);
+  vec2 q = fxRot(spin * pr) * p / R;
   float d = sdShape(q, shape) * R;
   float inside = smoothstep(.002, -.002, d);
+  if (!closeFirst || showNew) inside = max(inside, smoothstep(.85, 1., pr));   // 结尾补满图形凹处（星形/心形盖不到的角）
   vec3 outsideC = closeFirst ? vec3(0.) : a;
   vec3 insideC = closeFirst ? (showNew ? b : a) : b;
   vec3 c = mix(outsideC, insideC, inside);
   // ③ 描边
-  float line = smoothstep(outline, outline * .5, abs(d)) * step(.001, R) * step(R, maxR * .98);
+  float line = smoothstep(outline, outline * .5, abs(d)) * step(.001, R) * (1. - smoothstep(.8, .95, pr));
   c = mix(c, lineColor, line);
   return vec4(c, 1.);
 }

@@ -9,8 +9,8 @@
   "when": "空镜与风景、梦幻与天堂意象、时间流逝、抒情段落；给单调的天空加层次。",
   "avoid": "室内或夜景（云的受光会不对，可调 lit 颜色）；天空区域有重要文字时。",
   "params": {
-    "cover": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "云量" },
-    "height": { "type": "float", "default": 0.55, "min": 0, "max": 1, "label": "云层下沿（从底部算）" },
+    "cover": { "type": "float", "default": 0.7, "min": 0, "max": 1, "label": "云量" },
+    "height": { "type": "float", "default": 0.45, "min": 0, "max": 1, "label": "云层下沿（从底部算）" },
     "speed": { "type": "float", "default": 0.03, "min": 0, "max": 0.3, "label": "飘移速度" },
     "lit": { "type": "color", "default": "#fff4e6", "label": "受光色" },
     "shadow": { "type": "color", "default": "#8a8fa8", "label": "背光色" },

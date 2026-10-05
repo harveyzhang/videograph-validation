@@ -12,10 +12,10 @@
     "mode": { "type": "float", "default": 0, "min": 0, "max": 2, "label": "方式：0 马赛克 / 1 模糊 / 2 黑条" },
     "centerX": { "type": "float", "default": 0.5, "min": 0, "max": 1, "label": "区域中心 X" },
     "centerY": { "type": "float", "default": 0.55, "min": 0, "max": 1, "label": "区域中心 Y" },
-    "sizeX": { "type": "float", "default": 0.18, "min": 0.02, "max": 1, "label": "区域半宽（画面高度比例）" },
-    "sizeY": { "type": "float", "default": 0.22, "min": 0.02, "max": 1, "label": "区域半高（画面高度比例）" },
+    "sizeX": { "type": "float", "default": 0.3, "min": 0.02, "max": 1, "label": "区域半宽（画面高度比例）" },
+    "sizeY": { "type": "float", "default": 0.3, "min": 0.02, "max": 1, "label": "区域半高（画面高度比例）" },
     "round": { "type": "bool", "default": true, "label": "椭圆区域（关 = 矩形）" },
-    "block": { "type": "float", "default": 0.025, "min": 0.005, "max": 0.1, "label": "马赛克格子大小" },
+    "block": { "type": "float", "default": 0.05, "min": 0.005, "max": 0.15, "label": "马赛克格子大小" },
     "jitter": { "type": "float", "default": 0, "min": 0, "max": 1, "label": "鼓点抖动（通常由节拍驱动）" }
   },
   "bindings": { "jitter": { "to": "kick", "amount": 0.5 } },
