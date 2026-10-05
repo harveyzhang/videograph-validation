@@ -25,6 +25,12 @@ conda run -n videograph-analyzer python -m pip install -r analyzer/requirements-
 
 B 下可升级 librosa 1.0 / demucs 4.1；版本变更必须同步 requirements 与 MODELS.md。
 
+## macOS / Linux（Apple Silicon 已实测）
+
+- 用 uv 建仓库内环境：`uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch==2.8.0 torchaudio==2.8.0 -r analyzer/requirements-analyzer.txt`，再把 `VIDEOGRAPH_ANALYZER_PYTHON` 指向 `.venv/bin/python`。
+- 无 CUDA 时 beat_this 与 Qwen 自动走 CPU（M 系列芯片上 30 秒片段的识别 + 逐词对齐约 25 秒）。
+- 模型默认放在仓库同级的 `.models`（`VIDEOGRAPH_MODELS_DIR` 可改）；访问不了 Hugging Face 时，Qwen 官方在 ModelScope 有同名仓库，下载后可按 HF 仓库 API 的 sha256 逐文件核对。
+
 ## 模型下载（逐项列出体积，用户同意后执行）
 
 | 模型 | 体积（约） | 用途 | 许可状态 |

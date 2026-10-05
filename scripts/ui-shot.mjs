@@ -1,8 +1,9 @@
 // ui-shot.mjs — 给工作台截图（审阅前端美化用）：node scripts/ui-shot.mjs <out.png> [projectName] [width] [height]
 import { chromium } from 'playwright-core';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 
 const [out = '.cache/ui.png', projectName = 'THE LAST AUDIT', width = '1680', height = '1000'] = process.argv.slice(2);
-const browser = await chromium.launch({ headless: true, executablePath: process.env.EDGE_PATH ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11'] });
+const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs()] });
 const page = await browser.newPage({ viewport: { width: Number(width), height: Number(height) } });
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));

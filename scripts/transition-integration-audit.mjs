@@ -20,6 +20,7 @@ async function invoke(name, args, expectError = false) {
 }
 const colorScene = (r, g, b) => `import { Scene } from '../engine/scene';
 import { FSPass } from '../engine/gl';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 export default class TestScene extends Scene {
  pass = new FSPass('void main(){fragColor=vec4(${r},${g},${b},1.);}');
  render(f,out){this.pass.render(this.ctx.renderer,out);return {bloom:0,halation:0,grain:0,ca:0,vignette:0,hud:0,frame:0,pdoom:0};}
@@ -34,7 +35,7 @@ try {
   project = await invoke('project_shot_submit', { projectId, shotId: right.id, expectedInputRevision: right.inputRevision, code: colorScene('0.', '0.', '.25'), summary: '测试用蓝色场，不是创作产物' });
   const transitionId = project.transitions[0].id;
   const errors = [];
-  browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+  browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: 1680, height: 1000 } });
   page.on('pageerror', (error) => errors.push(error.message));
   const checks = [];

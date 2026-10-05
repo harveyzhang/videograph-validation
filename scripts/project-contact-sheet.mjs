@@ -6,13 +6,14 @@ import { chromium } from 'playwright-core';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { browserPath, angleArgs } from '../src/server/browser.mjs';
 
 const projectId = process.argv[2];
 if (!projectId) throw new Error('usage: node scripts/project-contact-sheet.mjs <projectId>');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const client = new Client({ name: 'videograph-visual-audit', version: '1.0.0' });
 const transport = new StdioClientTransport({ command: process.execPath, args: ['--env-file-if-exists=.env.local', '--experimental-strip-types', '--no-warnings', 'src/pdoom/mcp-server.ts'], cwd: root, env: process.env, stderr: 'pipe' });
-const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--use-angle=d3d11', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: [...angleArgs(), '--ignore-gpu-blocklist'] });
 async function call(name, args) {
   const response = await client.callTool({ name, arguments: args });
   const text = response.content.filter((item) => item.type === 'text').map((item) => item.text).join('\n');

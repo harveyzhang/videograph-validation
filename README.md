@@ -40,7 +40,7 @@ npm run dev           # 审阅室界面：http://127.0.0.1:5188/?view=project
 npm run mcp           # MCP stdio 工具入口（供 Claude / GLM 等 LLM 连接）
 ```
 
-环境：Node.js 24（使用内置 `node:sqlite`）、本机 ffmpeg/ffprobe。先启动 service 再打开界面。让任意支持 MCP 的 LLM 连接 `npm run mcp`，从 `direct_video` prompt 或 `project_director_next` 开始建片；动效/案例/提示词库按需从上游下载，不随本仓库分发（`effects/sources.json`）。用户素材、数据库、服务令牌与导出文件保留在本机，不提交 Git。
+环境：Node.js 24（使用内置 `node:sqlite`）、本机 ffmpeg/ffprobe，以及一个 Chromium 内核浏览器（Windows 默认 Edge；macOS / Linux 自动探测 Edge、Chrome、Chromium，可用 `EDGE_PATH` 指定；macOS 上 WebGL 走 Metal）。先启动 service 再打开界面。让任意支持 MCP 的 LLM 连接 `npm run mcp`，从 `direct_video` prompt 或 `project_director_next` 开始建片；动效/案例/提示词库按需从上游下载，不随本仓库分发（`effects/sources.json`）。用户素材、数据库、服务令牌与导出文件保留在本机，不提交 Git。
 
 ## 教模型怎么用：技能包（Skills）
 

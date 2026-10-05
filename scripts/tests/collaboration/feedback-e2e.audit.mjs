@@ -14,6 +14,7 @@ import { chromium } from 'playwright-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createStreamProject } from './helpers-fb04.mjs';
+import { browserPath, angleArgs } from '../../../src/server/browser.mjs';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const referenceBgm = join(root, '../pdoom-video/audio/pdoom.mp3');
@@ -27,7 +28,7 @@ let servicePort = Number(process.env.FB04_SERVICE_PORT) || 6340 + Math.floor(Mat
 let studioPort = Number(process.env.FB04_STUDIO_PORT) || 6640 + Math.floor(Math.random() * 60);
 let serviceBase = `http://127.0.0.1:${servicePort}`;
 let studioBase = `http://127.0.0.1:${studioPort}`;
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const EDGE = browserPath();
 const log = (message) => console.log(`[fb04 ${((Date.now() - t0) / 1000).toFixed(0).padStart(4)}s] ${message}`);
 const t0 = Date.now();
 let service, vite, browser, client, projectId;
@@ -174,7 +175,7 @@ try {
 
   // ---- 3. 人（浏览器）：选中镜头 → 预览 → 播放 → 定位锚点 → 带保留项的意见
   log('浏览器：添加带时间锚点与保留项的意见');
-  browser = await chromium.launch({ headless: true, executablePath: EDGE, args: ['--autoplay-policy=no-user-gesture-required', '--use-angle=d3d11'] });
+  browser = await chromium.launch({ headless: true, executablePath: EDGE, args: ['--autoplay-policy=no-user-gesture-required', ...angleArgs()] });
   const page = await browser.newPage({ viewport: { width: 1680, height: 1000 } });
   const pageErrors = [];
   const consoleTail = [];

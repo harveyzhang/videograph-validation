@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { createFixtureProject, fixtureScene } from './helpers.mjs';
+import { browserPath, angleArgs } from '../../../src/server/browser.mjs';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(), 'videograph-fb02-ui-'));
@@ -46,7 +47,7 @@ try {
     assert.ok(i < 149, 'vite dev server 未启动');
   }
 
-  browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', args: ['--autoplay-policy=no-user-gesture-required', '--use-angle=d3d11'] });
+  browser = await chromium.launch({ headless: true, executablePath: browserPath(), args: ['--autoplay-policy=no-user-gesture-required', ...angleArgs()] });
   const page = await browser.newPage({ viewport: { width: 1680, height: 1000 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));

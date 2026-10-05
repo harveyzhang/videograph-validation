@@ -3,7 +3,7 @@ import { createServer, normalizePath } from 'vite';
 import { createServer as createNetServer } from 'node:net';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { renderShotsWithTransitions } from './transitions.mjs';
 import { FX_COMMON, hexToVec3, resolveParams } from '../fx/runtime.mjs';
 
@@ -23,6 +23,9 @@ async function reservePort() {
 
 export async function startReferenceServer({ root = resolve(productRoot, '../pdoom-video'), port = 0, shots, transitions = [], fps = 30, audioFile = 'audio/pdoom.mp3' } = {}) {
   if (!/^audio\/[a-z0-9._-]+$/i.test(audioFile)) throw new Error('audioFile 必须位于引擎 audio/ 目录');
+  // 引擎根目录取真实路径：路径含软链接时（如 macOS 临时目录 /var → /private/var），Vite 把模块解析到真实路径，
+  // 与按原路径配置的 root/fs.allow 不一致，会导致注入的镜头表不生效（画面全空）。
+  root = realpathSync(root);
   const renderShots = shots ? renderShotsWithTransitions(shots, transitions, fps) : null;
   const dependencies = transitions.filter((transition) => transition.mode !== 'cut').map(({ fromShotId, toShotId }) => [fromShotId, toShotId]);
   const app = join(root, 'app');
